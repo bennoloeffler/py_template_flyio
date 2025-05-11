@@ -72,7 +72,6 @@ _tasks:
   - "git add ."
   - "uv pip install pre-commit"
   - "pre-commit install"
-  - "uv pip compile pyproject.toml -o requirements.txt"  
   - "flyctl launch --name '{{project_name}}' --region fra --now"
   - "mv fly.toml fly.prod.toml"
   - "flyctl launch --name '{{project_name}}-test' --region fra --now"
