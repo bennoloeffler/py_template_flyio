@@ -114,4 +114,5 @@ in the docs/ folder, there are three empty files:
 You use these files to document your design, requirements and todos for cursor.
 
 ## Cursor Rules
-not yet done
+see folder .cursor/rules/rule_xxx.mdc
+Old style: cursorrules.yaml/json not used anymore.

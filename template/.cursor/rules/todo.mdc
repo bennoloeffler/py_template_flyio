@@ -1,0 +1,14 @@
+---
+description: when the user askes to progress to next TODO, just by 'TODO' or 'NEXT'
+globs: 
+alwaysApply: false
+---
+
+- have a look at docs/todos.md
+- before you proceed to the next TODO, make sure, ./check.sh is running.
+- before you proceed to the next TODO, make sure, you do a review: Clear, separated, understandable code?
+- find the next open todo
+- check, if it makes sense to do it or if
+  - it needs to be refined first with SUB-TODOS
+  - some other todo is - from an implementation point of view - better suited
+- tell the user what you are going to do and do it. 
