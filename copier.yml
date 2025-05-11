@@ -1,0 +1,80 @@
+# copier.yml - Template configuration file
+
+# Template metadata
+_subdirectory: template
+_templates_suffix: .jinja
+_envops:
+  block_end_string: "%}"
+  block_start_string: "{%"
+  comment_end_string: "#}"
+  comment_start_string: "{#"
+  keep_trailing_newline: true
+  variable_end_string: "}}"
+  variable_start_string: "{{"
+
+# Questions
+project_name:
+  type: str
+  help: Name of the project
+  default: "{{ _copier_conf.dst_path | lower | replace('_', '-') | replace(' ', '-') | basename }}"
+
+module_name:
+  type: str
+  help: Name of the main Python module (in snake_case)
+  default: "{{  _copier_conf.dst_path |lower|replace('-', '_')|replace(' ', '_') }}"
+
+description:
+  type: str
+  help: Project description
+  default: ...
+
+author_name:
+  type: str
+  help: Author name
+  default: Benno Loeffler
+
+author_email:
+  type: str
+  help: Author email
+  default: benno.loeffler@gmx.de
+
+python_version:
+  type: str
+  help: Minimum Python version
+  default: "3.10"
+  choices:
+    - "3.8"
+    - "3.9"
+    - "3.10"
+    - "3.11"
+    - "3.12"
+
+
+dependencies:
+  type: str
+  help: Dependencies (comma-separated list)
+  default: "pydantic, fastapi[all], openai, uvicorn"
+
+development_dependencies:
+  type: str
+  help: Development dependencies (comma-separated list)
+  default: "pytest,pytest-watch,black,ruff,mypy"
+
+# Template migration settings
+_skip_if_exists:
+  - README.md
+
+_tasks:
+  - "uv venv"
+  - "uv sync"
+  - "uv sync --dev"
+  - "git init"
+  - "git add ."
+  - "uv pip install pre-commit"
+  - "pre-commit install"
+  - "uv pip compile pyproject.toml -o requirements.txt"  
+  - "flyctl launch --name '{{project_name}}' --region fra --now"
+  - "mv fly.toml fly.prod.toml"
+  - "flyctl launch --name '{{project_name}}-test' --region fra --now"
+
+  #- "./deploy_prod_fly.sh"

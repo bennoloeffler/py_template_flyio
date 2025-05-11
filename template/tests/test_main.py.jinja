@@ -1,0 +1,8 @@
+from {{ module_name }}.main import main
+
+
+def test_main() -> None:
+    """Test that the main function runs without errors."""
+    # This is a simple smoke test
+    main()
+    assert True

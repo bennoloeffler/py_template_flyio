@@ -1,0 +1,65 @@
+# {{ project_name }}
+
+{{ description }}
+
+## Installation
+
+```bash
+{% if use_uv %}
+# Create virtual environment with uv
+uv venv .venv
+source .venv/bin/activate  # On Unix or macOS
+# or
+.venv\Scripts\activate  # On Windows
+
+# Install the package
+uv pip install -e .
+{% else %}
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Unix or macOS
+# or
+.venv\Scripts\activate  # On Windows
+
+# Install the package
+pip install -e .
+{% endif %}
+```
+
+## Usage
+
+```python
+from {{ module_name }} import main
+
+main()
+```
+
+## Development
+
+{% if use_uv %}
+This project uses [uv](https://github.com/astral-sh/uv) for dependency management.
+{% endif %}
+
+### Installing development dependencies
+
+```bash
+{% if use_uv %}
+uv pip install {{ development_dependencies|replace(',', ' ') }}
+{% else %}
+pip install {{ development_dependencies|replace(',', ' ') }}
+{% endif %}
+```
+
+### Running tests
+
+```bash
+pytest
+```
+
+### Code formatting and linting
+
+```bash
+black .
+ruff check .
+mypy .
+```

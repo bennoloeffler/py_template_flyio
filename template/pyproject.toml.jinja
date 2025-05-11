@@ -1,0 +1,50 @@
+[project]
+name = "{{ project_name }}"
+version = "0.1.0"
+description = "{{ description }}"
+readme = "README.md"
+requires-python = ">={{ python_version }}"
+{% if dependencies %}
+dependencies = [
+    {% for dep in dependencies.split(',') %}
+    "{{ dep.strip() }}",
+    {% endfor %}
+]
+{% else %}
+dependencies = []
+{% endif %}
+authors = [
+    {name = "{{ author_name }}", email = "{{ author_email }}"}
+]
+
+[project.optional-dependencies]
+dev = [
+    {% for dep in development_dependencies.split(',') %}
+    "{{ dep.strip() }}",
+    {% endfor %}
+]
+
+#[build-system] # uv is not being used as a build system
+#requires = ["uv"]  # TODO: remove this once we have a proper build system
+#build-backend = "uv.buildapi"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle
+    "F",  # pyflakes
+    "I",  # isort
+]
+
+
+[tool.mypy]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
