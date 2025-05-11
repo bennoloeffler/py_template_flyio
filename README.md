@@ -116,3 +116,6 @@ You use these files to document your design, requirements and todos for cursor.
 ## Cursor Rules
 see folder .cursor/rules/rule_xxx.mdc
 Old style: cursorrules.yaml/json not used anymore.
+
+# TODOs
+- create a better README.md for the template

@@ -75,5 +75,6 @@ _tasks:
   - "flyctl launch --name '{{project_name}}' --region fra --now"
   - "mv fly.toml fly.prod.toml"
   - "flyctl launch --name '{{project_name}}-test' --region fra --now"
-
+  - "fly secrets set OPENAI_API_KEY=$OPENAI_API_KEY"
+  - "fly -c fly.prod.toml secrets set OPENAI_API_KEY=$OPENAI_API_KEY"
   #- "./deploy_prod_fly.sh"
