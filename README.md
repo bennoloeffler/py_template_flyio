@@ -119,3 +119,4 @@ Old style: cursorrules.yaml/json not used anymore.
 
 # TODOs
 - create a better README.md for the template
+- changelog with llm from prod release to prod release does not work yet
