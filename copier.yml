@@ -77,4 +77,10 @@ _tasks:
   - "flyctl launch --name '{{project_name}}-test' --region fra --now"
   - "fly secrets set OPENAI_API_KEY=$OPENAI_API_KEY"
   - "fly -c fly.prod.toml secrets set OPENAI_API_KEY=$OPENAI_API_KEY"
+  - "fly secrets set DB_FOLDER="/data"
+  - "fly -c fly.prod.toml secrets set DB_FOLDER="/data"
+  - "flyctl volumes create bels_volume --region fra --size 1"
+
+
+
   #- "./deploy_prod_fly.sh"

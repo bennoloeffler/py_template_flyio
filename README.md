@@ -39,7 +39,7 @@ You will be prompted for project-specific values (like `module_name`). If your <
 
 ## ALL DONE DURING Generation
 
-**so you dont have to...**
+**so you dont have to e.g. this manually:**
   - ```uv venv```
   - ```uv sync```
   - ```uv sync --dev```
@@ -73,6 +73,17 @@ You will be prompted for project-specific values (like `module_name`). If your <
    flyctl launch --name '{{project_name}}' --region fra --now
    mv fly.toml fly.prod.toml
    flyctl launch --name '{{project_name}}-test' --region fra --now
+   ```
+
+4. **Create secrets:**
+   ```bash
+   flyctl secrets set OPENAI_API_KEY=$OPENAI_API_KEY
+   flyctl secrets set DB_FOLDER="/data"
+   ```
+
+4. **Create a volume for the database:**
+   ```bash
+   flyctl volumes create bels_volume --region fra --size 1
    ```
 
 ## Development
@@ -122,6 +133,11 @@ There are two fly.toml files:
     ```bash
     fly secrets set <key>="<value>"
     ```
+There are two secrets already set:
+- OPENAI_API_KEY (from your env variable)
+- DB_FOLDER (to ```/data```)
+
+You can add more secrets to the production and test apps.
 
 ## Design, Requirements and TODOs: Basis for Cursor
 in the docs/ folder, there are three empty files:
