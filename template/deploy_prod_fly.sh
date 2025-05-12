@@ -25,7 +25,7 @@ fi
 
 # Final message
 TAG="Production_$(timestamp)"
-MESSAGE="Release to production at $(timestamp) by $(whoami)\n\n$SUMMARY"
+MESSAGE="Release to fly.io production system at $(timestamp) by $(whoami)\n\n$SUMMARY"
 
 # Append to changelog
 echo -e "\n## $TAG\n$MESSAGE" >> CHANGELOG.md
