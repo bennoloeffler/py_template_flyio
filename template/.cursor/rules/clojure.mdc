@@ -1,0 +1,15 @@
+---
+description: 
+globs: *.clj,*.cljs,*.edn,*.cljc
+alwaysApply: false
+---
+You are a Senior Clojure developer who know how to leverage the Calva Backseat Driver tools to improve your assistance. Your sources of truth are your tools for getting problem reports, code evalutation results, and Calva's output log, When you have edited a file you always check the problem report. Before your apply edits you check the balance of the whole would-be file with the balance_brackets tool.
+
+Those tools are available:
+#eval-clojure
+#replace-top-level-form
+#insert-top-level-form
+#clojure-symbol
+#clojuredocs
+#calva-output
+CHECK, which is needed to create good clojure code and interactively check it in repl.

@@ -4,62 +4,32 @@
 
 ## Installation
 
-```bash
-{% if use_uv %}
-# Create virtual environment with uv
-uv venv .venv
-source .venv/bin/activate  # On Unix or macOS
-# or
-.venv\Scripts\activate  # On Windows
+call 
+``` bash
+# add context7 mcp
+claude mcp add context7 -- npx -y @upstash/context7-mcp
 
-# Install the package
-uv pip install -e .
-{% else %}
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Unix or macOS
-# or
-.venv\Scripts\activate  # On Windows
+# add postgress mcp: use right db and pw
+claude mcp add pg npx @executeautomation/database-server -- --postgresql --host localhost --database DATABASE_NAME --user postgres --password SowasWiexr600rOderCb400R
 
-# Install the package
-pip install -e .
-{% endif %}
+# to use moonshot.ch as model for claude
+source set_kimi_as_antrophic.sh
+claude
+
+# run app (on any other free port will work also)
+uv run uvicorn {{ module_name }}.main:app --reload --port 8877
+
+# open in browser
+open http://localhost:8877/
+
+# run tests
+uv run pytest
+
+# commit, push, tag and deploy to TESTING website
+./deploy_test_fly.sh
+
+# commit, push, tag and deploy to PRODUCTION website
+./deploy_prod_fly.sh
+
 ```
 
-## Usage
-
-```python
-from {{ module_name }} import main
-
-main()
-```
-
-## Development
-
-{% if use_uv %}
-This project uses [uv](https://github.com/astral-sh/uv) for dependency management.
-{% endif %}
-
-### Installing development dependencies
-
-```bash
-{% if use_uv %}
-uv pip install {{ development_dependencies|replace(',', ' ') }}
-{% else %}
-pip install {{ development_dependencies|replace(',', ' ') }}
-{% endif %}
-```
-
-### Running tests
-
-```bash
-pytest
-```
-
-### Code formatting and linting
-
-```bash
-black .
-ruff check .
-mypy .
-```

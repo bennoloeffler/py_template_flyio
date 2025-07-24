@@ -1,0 +1,34 @@
+# Python-Cache & virtuelle Umgebungen
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+.uv/
+*.egg-info/
+.eggs/
+.env
+.env.*
+*.sqlite3
+
+# macOS/Linux/IDE-Dateien
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Logs & Tests
+*.log
+.coverage
+htmlcov/
+.cache/
+.tox/
+pytest_cache/
+
+# Git & Fly
+.git/
+.gitignore
+.dockerignore
+fly.toml

@@ -1,32 +1,23 @@
-# FROM python:3.11.6 AS builder
-
-# ENV PYTHONUNBUFFERED=1 \
-#     PYTHONDONTWRITEBYTECODE=1
-# WORKDIR /app
-
-
-# RUN python -m venv .venv
-# COPY requirements.txt ./
-# RUN .venv/bin/pip install -r requirements.txt
-# FROM python:3.11.6-slim
-# WORKDIR /app
-# COPY --from=builder /app/.venv .venv/
-# COPY . .
-# CMD ["/app/.venv/bin/uvicorn", "{{ module_name }}.main:app", "--host", "0.0.0.0", "--port", "8080"]
-
-
-
 FROM python:3.11-slim
 
+# System vorbereiten
 WORKDIR /app
+ENV PYTHONUNBUFFERED=1
 
-COPY . .
-
+# System-Tools installieren & uv
 RUN apt-get update && apt-get install -y curl && \
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    /root/.local/bin/uv venv && \
-    /root/.local/bin/uv sync --no-cache
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Projektdateien kopieren, see .dockerignore
+COPY . .
+
+# .venv erstellen & dependencies installieren
+RUN /root/.local/bin/uv venv && \
+    /root/.local/bin/uv sync --python .venv/bin/python --no-cache
+
+# Port öffnen
 EXPOSE 8080
 
-CMD ["/root/.local/bin/uv", "run", "uvicorn", "{{ module_name }}.main:app", "--host", "0.0.0.0", "--port", "8080",  "--log-level", "info"]
+# Anwendung starten mit .venv aktivem Interpreter
+CMD ["/app/.venv/bin/uvicorn", "{{ module_name }}.main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]

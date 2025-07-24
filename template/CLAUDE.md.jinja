@@ -1,0 +1,110 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+
+## Architecture
+
+The project is a XXX system with the following key concepts:
+- **something**: asdf 
+- **something else**: alsdjkf
+
+## Pricing Plans
+
+- **Free**: 100 leads, bring your own AI-Key
+- **Light**: $2/month, one user, bring your own AI-Key or pay per AI-use
+- **Team**: $30/month, 10 users as team, bring your own AI-Key or pay per AI-use  
+- **Company**: $200/month, 200 users
+
+## Core Features
+
+- **Landing Page**: Professional welcome page with feature overview and navigation
+- **User Management**: Complete CRUD operations with HTMX interface
+
+## UseCases
+NOT YET! To describe. Ask Developer! And update this.
+
+## Technology Stack
+
+**Backend**: Python + FastAPI + SQLAlchemy + Alembic
+**Frontend**: HTMX + Alpine.js + TailwindCSS  
+**Database**: PostgreSQL
+**Authentication**: FastAPI-Users or similar
+
+## Development Commands
+
+```bash
+
+# Install dependencies (including dev dependencies)
+uv sync --dev
+
+# run app (on any other free port will work also)
+uv run uvicorn {{ module_name }}.main:app --reload --port 8877
+
+# open in browser
+open http://localhost:8877/
+
+# run tests
+uv run pytest
+
+# Add new dependency
+uv add <package>
+
+# Add dev dependency
+uv add --dev <package>
+
+# commit, push, tag and deploy to TESTING website
+./deploy_test_fly.sh
+
+# commit, push, tag and deploy to PRODUCTION website
+./deploy_prod_fly.sh
+
+# Run specific test file
+uv run pytest tests/test_health.py -v
+
+# Python shell in virtual environment
+uv run python
+```
+
+## Available Endpoints
+
+THIS IS AN EXAMPLE. CHANGE! BUT THE STRUCTURE MAY HELP:
+- html
+- REST
+- HTMX
+
+### Web UI
+- **/** - Landing page with feature overview and navigation
+- **/ui/users** - User management interface with HTMX
+- **/health** - Health check endpoint
+- **/docs** - Auto-generated API documentation
+
+### REST API
+- **POST /users** - Create new user
+- **PUT /users** - Upsert user (create or update)
+
+### HTML UI Endpoints (HTMX)
+- **GET /ui/users** - Main user management page
+- **GET /ui/users/list** - User list partial
+- **GET /ui/users/new** - New user form
+- **GET /ui/users/{id}/edit** - Edit user form
+- **POST /ui/users** - Create user via form
+- **PUT /ui/users/{id}** - Update user via form
+- **DELETE /ui/users/{id}** - Delete user via HTMX
+
+## Development Strategy
+
+- Uses FastAPI + HTMX for modern web development
+- SQLAlchemy for database operations with async support
+- TDD approach with comprehensive test coverage
+- Environment-aware database configuration (SQLite/PostgreSQL)
+- OpenAI integration for LLM-powered chat interface
+
+## Environment Variables
+This is an example. CHANGE!
+Required environment variables:
+- `XYZ` - Database connection string (e.g., "postgresql+asyncpg://user:pass@host:5432/db")
+- `OPENAI_API_KEY` - OpenAI API key for chat functionality
+- `NOFOCR_ADMIN_PASSWORD` - Admin password (optional, defaults to "admin123")
