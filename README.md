@@ -10,6 +10,7 @@ A **Copier template** for quickly bootstrapping a modern Python web application,
 - **uv in Docker**: Uses [uv](https://github.com/astral-sh/uv) for fast, reproducible dependency management inside Docker.
 - **FastAPI**: Modern, async Python web framework for building APIs and web apps.
 - **Cursor rules prepared**: Includes some new type of cursor rules for best-practice development with Cursor.
+- **CLAUDE.md**: how to use tools
 - **Code quality tools**: Pre-configured to run `ruff` (linting), `mypy` (type checking), and `black` (formatting).
 
 ---
@@ -41,15 +42,12 @@ You will be prompted for project-specific values (like `module_name`). If your <
 
 **so you dont have to e.g. this manually:**
   - ```uv venv```
-  - ```uv sync```
-  - ```uv sync --dev```
   - ```git init```
-  - ```git add .```
-  - ```uv pip install pre-commit```
-  - ```pre-commit install```
   - ```flyctl launch --name '{{project_name}}' --region fra --now```
   - ```mv fly.toml fly.prod.toml```
   - ```flyctl launch --name '{{project_name}}-test' --region fra --now```
+  - ```uv sync --dev```
+  - ```git add .```
 
 
 1. **Create and activate a virtual environment:**
@@ -60,12 +58,10 @@ You will be prompted for project-specific values (like `module_name`). If your <
    uv sync --dev
 
    ```
-2. **Init git repo and hook up pre-commit:**
+2. **Init git repo:**
    ```bash
    git init
    git add .
-   uv pip install pre-commit
-   pre-commit install
    ```
 
 3. **Deploy to Fly.io (with Docker):**
@@ -75,21 +71,27 @@ You will be prompted for project-specific values (like `module_name`). If your <
    flyctl launch --name '{{project_name}}-test' --region fra --now
    ```
 
-4. **Create secrets:**
+4. **Create secrets (YOU NEED TO DO THAT)**
    ```bash
    flyctl secrets set OPENAI_API_KEY=$OPENAI_API_KEY
    flyctl secrets set DB_FOLDER="/data"
    ```
 
-4. **Create a volume for the database:**
+4. **Create a volume for the database:  (YOU NEED TO DO THAT)**
    ```bash
    flyctl volumes create bels_volume --region fra --size 1
    ```
+4. **add to github and have a first push before you deploy:  (YOU NEED TO DO THAT)**
+   ```bash
+   # do in vscode SHIFT+COMMAND+A -> `Publish To Github`
+   ```
+
 
 ## Development
 3. **Run the app:**
    ```bash
-   uvicorn <your_module>.main:app --reload
+   uvicorn <your_module>.main:app 
+   uv run uvicorn <your_module>.main:app --reload --port 9876 #dev mode
    ```
 4. **Run tests:**
    ```bash
@@ -112,18 +114,7 @@ You will be prompted for project-specific values (like `module_name`). If your <
    ./rcheck-watch.sh
    ```
 6. **Deploy to Fly.io (with Docker):**
-There are two fly.toml files:
-    - fly.prodt.toml: for production
-    - fly.toml: for testing
-    - Whenever you ```fly deploy```, you deploy to the test app, with the default fly.toml file.
 
-    But use:
-    ```bash
-    ./deploy_test_fly.sh # for test system 
-    ./deploy_prod_fly.sh # for production system
-    ```
-    Because then, meaningful git tags are created and pushed to github.
-   
 ## Preparation for production
 - login to fly
     ```bash
@@ -133,11 +124,17 @@ There are two fly.toml files:
     ```bash
     fly secrets set <key>="<value>"
     ```
-There are two secrets already set:
-- OPENAI_API_KEY (from your env variable)
-- DB_FOLDER (to ```/data```)
+There are two fly.toml files:
+    - fly.prod.toml: for production
+    - fly.toml: for testing
+    - Whenever you ```fly deploy```, you deploy to the test app, with the default fly.toml file.
 
-You can add more secrets to the production and test apps.
+But use:
+```bash
+./deploy_test_fly.sh # for test system 
+./deploy_prod_fly.sh # for production system
+```
+Because then, meaningful git tags are created and pushed to github.
 
 ## Design, Requirements and TODOs: Basis for Cursor
 in the docs/ folder, there are three empty files:
@@ -145,15 +142,10 @@ in the docs/ folder, there are three empty files:
  - requirements.md: for requirements
  - todos.md: for todos
 
-There is a file ```PROMPT_for_O3.md``` file, that you can use to generate the files.
+There is a file ```CLAUDE.md``` file, that you can use to generate the files.
 
 You use these files to document your design, requirements and todos for cursor.
 
 ## Cursor Rules
 see folder .cursor/rules/rule_xxx.mdc
 Old style: cursorrules.yaml/json not used anymore.
-
-# TODOs
-- create a better README.md for the template
-- add a check for uncommitted files before deployment. Stop if not committed.
-- changelog with llm from prod release to prod release does not work yet
