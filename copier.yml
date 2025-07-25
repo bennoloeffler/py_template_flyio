@@ -75,6 +75,8 @@ _tasks:
   - "flyctl launch --name '{{project_name}}-test' --region fra --now"
   - "uv sync --dev"
   - "git add ."
+  - "uv add mypy"
+  - "./check.sh"
   #- "fly secrets set OPENAI_API_KEY=$OPENAI_API_KEY"
   #- "fly -c fly.prod.toml secrets set OPENAI_API_KEY=$OPENAI_API_KEY"
   #- "fly secrets set DB_FOLDER=/data"
