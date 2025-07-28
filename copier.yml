@@ -41,7 +41,7 @@ author_email:
 python_version:
   type: str
   help: Minimum Python version
-  default: "3.10"
+  default: "3.11"
   choices:
     - "3.8"
     - "3.9"
