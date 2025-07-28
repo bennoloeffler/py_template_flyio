@@ -1,0 +1,151 @@
+"""
+Configuration management for {{ project_name }}.
+
+This module provides centralized configuration management using Pydantic BaseSettings.
+All configuration is loaded from environment variables with sensible defaults.
+"""
+
+import os
+import warnings
+from typing import Any, Dict, List, Optional
+
+from pydantic import AnyHttpUrl, Field, validator
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    """Application settings with validation and defaults."""
+
+    # Application
+    app_title: str = "{{ project_name }}"
+    app_version: str = Field(default="0.1.0", description="Application version")
+    environment: str = Field(
+        default="development",
+        description="Environment mode (development/production)",
+    )
+    debug: bool = Field(default=False, description="Enable debug mode")
+
+    # Server
+    host: str = Field(default="0.0.0.0", description="Server host")
+    port: int = Field(default=8000, description="Server port")
+    workers: int = Field(default=1, description="Number of worker processes")
+
+    # CORS
+    allowed_origins: List[str] = Field(
+        default=[
+            "http://localhost:8000",
+            "http://localhost:3000",
+            "http://localhost:5173",
+        ],
+        description="List of allowed CORS origins",
+    )
+
+    # Database
+    database_url: str = Field(
+        default="sqlite:///./{{ module_name }}.db",
+        description="Database connection string",
+    )
+    database_test_url: str = Field(
+        default="sqlite:///./{{ module_name }}_test.db",
+        description="Test database connection string",
+    )
+
+    # Redis
+    redis_url: str = Field(
+        default="memory://",
+        description="Redis connection string for caching and rate limiting",
+    )
+
+    # Security
+    secret_key: str = Field(
+        default="change-me-in-production",
+        description="Secret key for session encryption",
+    )
+    admin_password: str = Field(
+        default="admin123",
+        description="Default admin password",
+    )
+
+    # Rate Limiting
+    default_rate_limit: str = Field(
+        default="100/minute",
+        description="Default rate limit for endpoints",
+    )
+    health_rate_limit: str = Field(
+        default="10/minute",
+        description="Rate limit for health endpoint",
+    )
+
+    # External Services
+    openai_api_key: str = Field(
+        default="your-openai-key-here",
+        description="OpenAI API key for AI features",
+    )
+
+    @validator("database_url", pre=True)
+    def build_database_url(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
+        """Build database URL from environment or use default."""
+        if isinstance(v, str):
+            return v
+        return "sqlite:///./{{ module_name }}.db"
+
+    @validator("database_test_url", pre=True)
+    def build_test_database_url(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
+        """Build test database URL from environment or use default."""
+        if isinstance(v, str):
+            return v
+        return "sqlite:///./{{ module_name }}_test.db"
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
+        # Environment variable name mapping
+        fields = {
+            "app_title": {"env": "APP_TITLE"},
+            "app_version": {"env": "APP_VERSION"},
+            "environment": {"env": "ENVIRONMENT"},
+            "debug": {"env": "DEBUG"},
+            "host": {"env": "HOST"},
+            "port": {"env": "PORT"},
+            "workers": {"env": "WORKERS"},
+            "allowed_origins": {"env": "ALLOWED_ORIGINS"},
+            "database_url": {"env": "DATABASE_URL"},
+            "database_test_url": {"env": "DATABASE_TEST_URL"},
+            "redis_url": {"env": "REDIS_URL"},
+            "secret_key": {"env": "SECRET_KEY"},
+            "admin_password": {"env": "ADMIN_PASSWORD"},
+            "default_rate_limit": {"env": "DEFAULT_RATE_LIMIT"},
+            "health_rate_limit": {"env": "HEALTH_RATE_LIMIT"},
+            "openai_api_key": {"env": "OPENAI_API_KEY"},
+        }
+
+
+def get_settings() -> Settings:
+    """Get application settings with source tracking."""
+    settings = Settings()
+
+    # Log configuration sources for debugging
+    if settings.debug:
+        print("=== Configuration Sources ===")
+        for field_name, field_info in Settings.__fields__.items():
+            env_var = field_info.field_info.extra.get("env", field_name.upper())
+            value = getattr(settings, field_name)
+            
+            # Check if value came from environment, .env file, or default
+            if env_var in os.environ:
+                source = f"shell environment variable '{env_var}'"
+            elif os.path.exists(".env") and any(line.startswith(f"{env_var}=") for line in open(".env")):
+                source = f".env file"
+            else:
+                source = "default value"
+                
+            print(f"{field_name}: using value '{value}' from {source}")
+        print("=== End Configuration ===")
+
+    return settings
+
+
+# Global settings instance
+settings = get_settings()

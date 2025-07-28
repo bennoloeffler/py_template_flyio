@@ -53,12 +53,12 @@ python_version:
 dependencies:
   type: str
   help: Dependencies (comma-separated list)
-  default: "pydantic, fastapi[all], openai, uvicorn"
+  default: "pydantic, pydantic-settings, fastapi[all], openai, uvicorn, slowapi, redis, httpx"
 
 development_dependencies:
   type: str
   help: Development dependencies (comma-separated list)
-  default: "pytest,pytest-watch,black,ruff,mypy"
+  default: "pytest, pytest-watch, pytest-asyncio,black,ruff,mypy"
 
 # Template migration settings
 _skip_if_exists:
