@@ -219,16 +219,16 @@ def root(request: Request) -> HTMLResponse:
     </div>
 
     <script>
-        async function updateTime() {{
-            try {{
+        async function updateTime() {
+            try {
                 const response = await fetch('/time');
                 const data = await response.json();
                 document.getElementById('current-time').textContent = 
                     new Date(data.time).toLocaleString();
-            }} catch (error) {{
+            } catch (error) {
                 document.getElementById('current-time').textContent = 'Error loading time';
-            }}
-        }}
+            }
+        }
         
         // Update time on page load
         updateTime();
