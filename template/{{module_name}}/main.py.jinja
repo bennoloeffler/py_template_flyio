@@ -54,13 +54,13 @@ def root(request: Request) -> HTMLResponse:
     <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
     
     <style>
-        * {{
+        * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }}
+        }
         
-        body {{
+        body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -71,7 +71,7 @@ def root(request: Request) -> HTMLResponse:
             padding: 2rem;
         }}
         
-        .container {{
+        .container {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
             border-radius: 20px;
@@ -83,43 +83,43 @@ def root(request: Request) -> HTMLResponse:
             border: 1px solid rgba(255, 255, 255, 0.18);
         }}
         
-        h1 {{
+        h1 {
             font-size: 2.5rem;
             margin-bottom: 0.5rem;
             font-weight: 700;
         }}
         
-        .subtitle {{
+        .subtitle {
             font-size: 1.2rem;
             opacity: 0.8;
             margin-bottom: 2rem;
         }}
         
-        .features {{
+        .features {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1rem;
             margin: 2rem 0;
         }}
         
-        .feature {{
+        .feature {
             background: rgba(255, 255, 255, 0.1);
             padding: 1.5rem;
             border-radius: 10px;
             border: 1px solid rgba(255, 255, 255, 0.2);
         }}
         
-        .feature h3 {{
+        .feature h3 {
             margin-bottom: 0.5rem;
             font-size: 1.1rem;
         }}
         
-        .feature p {{
+        .feature p {
             opacity: 0.8;
             font-size: 0.9rem;
         }}
         
-        .api-links {{
+        .api-links {
             display: flex;
             gap: 1rem;
             justify-content: center;
@@ -127,7 +127,7 @@ def root(request: Request) -> HTMLResponse:
             margin: 2rem 0;
         }}
         
-        .api-links a {{
+        .api-links a {
             background: rgba(255, 255, 255, 0.2);
             color: white;
             padding: 0.75rem 1.5rem;
@@ -144,7 +144,7 @@ def root(request: Request) -> HTMLResponse:
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }}
         
-        .status {{
+        .status {
             margin-top: 2rem;
             padding: 1rem;
             background: rgba(255, 255, 255, 0.1);
@@ -153,13 +153,13 @@ def root(request: Request) -> HTMLResponse:
             font-size: 0.9rem;
         }}
         
-        .time-display {{
+        .time-display {
             font-size: 1.1rem;
             opacity: 0.9;
             margin-top: 1rem;
         }}
         
-        button {{
+        button {
             background: rgba(255, 255, 255, 0.2);
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.3);
