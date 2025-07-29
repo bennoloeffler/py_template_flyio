@@ -6,10 +6,9 @@ All configuration is loaded from environment variables with sensible defaults.
 """
 
 import os
-import warnings
-from typing import Any, Dict, List, Optional
+from typing import List
 
-from pydantic import AnyHttpUrl, Field, validator
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -82,44 +81,12 @@ class Settings(BaseSettings):
         description="OpenAI API key for AI features",
     )
 
-    @validator("database_url", pre=True)
-    def build_database_url(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
-        """Build database URL from environment or use default."""
-        if isinstance(v, str):
-            return v
-        return "sqlite:///./{{ module_name }}.db"
-
-    @validator("database_test_url", pre=True)
-    def build_test_database_url(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
-        """Build test database URL from environment or use default."""
-        if isinstance(v, str):
-            return v
-        return "sqlite:///./{{ module_name }}_test.db"
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-
-        # Environment variable name mapping
-        fields = {
-            "app_title": {"env": "APP_TITLE"},
-            "app_version": {"env": "APP_VERSION"},
-            "environment": {"env": "ENVIRONMENT"},
-            "debug": {"env": "DEBUG"},
-            "host": {"env": "HOST"},
-            "port": {"env": "PORT"},
-            "workers": {"env": "WORKERS"},
-            "allowed_origins": {"env": "ALLOWED_ORIGINS"},
-            "database_url": {"env": "DATABASE_URL"},
-            "database_test_url": {"env": "DATABASE_TEST_URL"},
-            "redis_url": {"env": "REDIS_URL"},
-            "secret_key": {"env": "SECRET_KEY"},
-            "admin_password": {"env": "ADMIN_PASSWORD"},
-            "default_rate_limit": {"env": "DEFAULT_RATE_LIMIT"},
-            "health_rate_limit": {"env": "HEALTH_RATE_LIMIT"},
-            "openai_api_key": {"env": "OPENAI_API_KEY"},
-        }
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+        "env_prefix": "",
+    }
 
 
 def get_settings() -> Settings:
@@ -129,18 +96,20 @@ def get_settings() -> Settings:
     # Log configuration sources for debugging
     if settings.debug:
         print("=== Configuration Sources ===")
-        for field_name, field_info in Settings.__fields__.items():
-            env_var = field_info.field_info.extra.get("env", field_name.upper())
+        for field_name, field_info in Settings.model_fields.items():
+            env_var = field_name.upper()
             value = getattr(settings, field_name)
-            
+
             # Check if value came from environment, .env file, or default
             if env_var in os.environ:
                 source = f"shell environment variable '{env_var}'"
-            elif os.path.exists(".env") and any(line.startswith(f"{env_var}=") for line in open(".env")):
-                source = f".env file"
+            elif os.path.exists(".env") and any(
+                line.startswith(f"{env_var}=") for line in open(".env")
+            ):
+                source = ".env file"
             else:
                 source = "default value"
-                
+
             print(f"{field_name}: using value '{value}' from {source}")
         print("=== End Configuration ===")
 

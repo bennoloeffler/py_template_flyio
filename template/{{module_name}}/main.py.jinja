@@ -1,15 +1,18 @@
 from datetime import datetime
-from typing import Dict, Any
+from typing import Any, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from fastapi.templating import Jinja2Templates
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from starlette.responses import Response
 
 from {{ module_name }}.config import settings
+
+# Initialize templates
+templates = Jinja2Templates(directory="{{ module_name }}/html_templates")
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -18,7 +21,7 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title=settings.app_title,
     version=settings.app_version,
-    description="{{ description }}",
+    description="...",
     debug=settings.debug,
 )
 
@@ -33,225 +36,67 @@ app.add_middleware(
 
 # Add rate limiter middleware
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
+    """Handle rate limit exceeded exceptions."""
+    return Response("Rate limit exceeded", status_code=429)
+
 
 @app.get("/")
-def root(request: Request) -> HTMLResponse:
+def root(request: Request) -> Any:
     """Returns a styled HTML landing page."""
-    return HTMLResponse(
-        f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ project_name }}</title>
-    <meta name="description" content="{{ description }}">
-    
-    <!-- Security headers -->
-    <meta http-equiv="X-Frame-Options" content="DENY">
-    <meta http-equiv="X-Content-Type-Options" content="nosniff">
-    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
-    
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-        }
-        
-        .container {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            padding: 3rem;
-            max-width: 600px;
-            width: 100%;
-            text-align: center;
-            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-        }
-        
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            font-weight: 700;
-        }
-        
-        .subtitle {
-            font-size: 1.2rem;
-            opacity: 0.8;
-            margin-bottom: 2rem;
-        }
-        
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin: 2rem 0;
-        }
-        
-        .feature {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 1.5rem;
-            border-radius: 10px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .feature h3 {
-            margin-bottom: 0.5rem;
-            font-size: 1.1rem;
-        }
-        
-        .feature p {
-            opacity: 0.8;
-            font-size: 0.9rem;
-        }
-        
-        .api-links {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin: 2rem 0;
-        }
-        
-        .api-links a {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 25px;
-            text-decoration: none;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        
-        .api-links a:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }
-        
-        .status {
-            margin-top: 2rem;
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            font-family: monospace;
-            font-size: 0.9rem;
-        }
-        
-        .time-display {
-            font-size: 1.1rem;
-            opacity: 0.9;
-            margin-top: 1rem;
-        }
-        
-        button {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            padding: 0.75rem 1.5rem;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1rem;
-            margin: 0.5rem;
-            transition: all 0.3s ease;
-        }
-        
-        button:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-1px);
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>{{ project_name }}</h1>
-        <p class="subtitle">{{ description }}</p>
-        
-        <div class="features">
-            <div class="feature">
-                <h3>⚡ FastAPI</h3>
-                <p>Modern, fast Python web framework</p>
-            </div>
-            <div class="feature">
-                <h3>🔒 Security</h3>
-                <p>Rate limiting, CORS, security headers</p>
-            </div>
-            <div class="feature">
-                <h3>📊 Monitoring</h3>
-                <p>Health checks and metrics</p>
-            </div>
-            <div class="feature">
-                <h3>🚀 Production Ready</h3>
-                <p>Docker and Fly.io deployment</p>
-            </div>
-        </div>
-        
-        <div class="api-links">
-            <a href="/docs">📚 API Docs</a>
-            <a href="/health">🏥 Health</a>
-            <a href="/hello">👋 Hello</a>
-            <a href="/time">🕐 Time</a>
-        </div>
-        
-        <div class="status">
-            <div>Environment: {settings.environment}</div>
-            <div>Version: {settings.app_version}</div>
-            <div class="time-display">
-                <span id="current-time">Loading...</span>
-                <button onclick="updateTime()">Refresh</button>
-            </div>
-        </div>
-    </div>
+    context = {
+        "title": settings.app_title,
+        "description": "...",
+        "environment": settings.environment,
+        "version": settings.app_version,
+        "features": [
+            {
+                "icon": "⚡",
+                "name": "FastAPI",
+                "description": "Modern, fast Python web framework",
+            },
+            {
+                "icon": "🔒",
+                "name": "Security",
+                "description": "Rate limiting, CORS, security headers",
+            },
+            {
+                "icon": "📊",
+                "name": "Monitoring",
+                "description": "Health checks and metrics",
+            },
+            {
+                "icon": "🚀",
+                "name": "Production Ready",
+                "description": "Docker and Fly.io deployment",
+            },
+        ],
+        "api_links": [
+            {"icon": "📚", "name": "API Docs", "url": "/docs"},
+            {"icon": "🏥", "name": "Health", "url": "/health"},
+            {"icon": "👋", "name": "Hello", "url": "/hello"},
+            {"icon": "🕐", "name": "Time", "url": "/time"},
+        ],
+    }
+    return templates.TemplateResponse("index.html", {"request": request, **context})
 
-    <script>
-        async function updateTime() {
-            try {
-                const response = await fetch('/time');
-                const data = await response.json();
-                document.getElementById('current-time').textContent = 
-                    new Date(data.time).toLocaleString();
-            } catch (error) {
-                document.getElementById('current-time').textContent = 'Error loading time';
-            }
-        }
-        
-        // Update time on page load
-        updateTime();
-        
-        // Update every 30 seconds
-        setInterval(updateTime, 30000);
-    </script>
-</body>
-</html>
-        """
-    )
 
 @app.get("/hello")
 @limiter.limit("60/minute")
 def hello_world(request: Request) -> Dict[str, str]:
     """Returns a hello world message."""
-    return {"message": f"Hello from {{ project_name }}!"}
+    return {"message": "Hello from {{ project_name }}!"}
+
 
 @app.get("/time")
 @limiter.limit("30/minute")
 def get_time(request: Request) -> Dict[str, str]:
     """Returns the current server time in ISO format."""
     return {"time": datetime.now().isoformat()}
+
 
 @app.get("/health")
 @limiter.limit("10/minute")
@@ -264,8 +109,11 @@ def health_check(request: Request) -> Dict[str, Any]:
         "environment": settings.environment,
     }
 
-if __name__ == "__main__":
+
+def main() -> None:
+    """Main entry point for the FastAPI application."""
     import uvicorn
+
     uvicorn.run(
         "{{ module_name }}.main:app",
         host=settings.host,
@@ -273,3 +121,8 @@ if __name__ == "__main__":
         reload=settings.debug,
         workers=1 if settings.debug else settings.workers,
     )
+
+
+if __name__ == "__main__":
+    main()
+
