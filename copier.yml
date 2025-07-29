@@ -75,7 +75,7 @@ _tasks:
   #  - "mv fly.toml fly.prod.toml"
   #  - "flyctl launch --name '{{project_name}}-test' --region fra  --yes --now"
   - "source .venv/bin/activate"
-  - "uv sync --dev"
+  - "uv sync --extra dev"
   - "git add ."
   - "uv add mypy"
   - "./check.sh"
