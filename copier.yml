@@ -65,6 +65,8 @@ _skip_if_exists:
   - README.md
 
 _tasks:
+  - "createdb -U postgres -h localhost -p 5432 {{ module_name }}"
+  - "createdb -U postgres -h localhost -p 5432 {{ module_name }}_test"
   - "uv venv"
   #- "uv sync"
   - "git init"
