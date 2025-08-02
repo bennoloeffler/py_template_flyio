@@ -1,0 +1,117 @@
+"""
+Database connection and counter management for PostgreSQL.
+"""
+
+import os
+from logging import warning
+from typing import Optional
+
+import asyncpg  # type: ignore
+from asyncpg import Pool  # type: ignore
+
+
+class Database:
+    """PostgreSQL database connection manager."""
+
+    def __init__(self, database_url: str):
+        self.database_url = database_url
+        self.pool: Optional[Pool] = None
+
+    async def connect(self) -> None:
+        """Create connection pool to PostgreSQL."""
+        self.pool = await asyncpg.create_pool(self.database_url)
+
+    async def disconnect(self) -> None:
+        """Close connection pool."""
+        if self.pool:
+            await self.pool.close()
+
+    async def init_db(self) -> None:
+        """Initialize database with counter table on startup if missing."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            # Drop all existing tables for clean state (used in tests)
+            if os.getenv("DROP_TABLES_BEFORE_INIT", "false").lower() == "true":
+                warning("Dropping existing tables...")
+                await conn.execute("DROP TABLE IF EXISTS counter CASCADE")
+                await conn.execute("DROP TABLE IF EXISTS schema_migrations CASCADE")
+
+            # Create counter table if it doesn't exist
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS counter (
+                    id SERIAL PRIMARY KEY,
+                    count INTEGER NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+
+            # Ensure we have exactly one counter row (id=1)
+            existing = await conn.fetchval("SELECT COUNT(*) FROM counter WHERE id = 1")
+            if existing == 0:
+                await conn.execute("INSERT INTO counter (id, count) VALUES (1, 0)")
+
+            # Verify the counter exists and is initialized
+            await conn.fetchval("SELECT count FROM counter WHERE id = 1")
+
+    async def reset_tables(self) -> None:
+        """Reset all tables - used for testing."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            await conn.execute("DROP TABLE IF EXISTS counter CASCADE")
+            await conn.execute("DROP TABLE IF EXISTS schema_migrations CASCADE")
+
+    async def get_count(self) -> int:
+        """Get current counter value."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            result = await conn.fetchval("SELECT count FROM counter WHERE id = 1")
+            return result or 0
+
+    async def increment_count(self) -> int:
+        """Increment counter and return new value."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            result = await conn.fetchval(
+                """
+                UPDATE counter 
+                SET count = count + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE id = 1
+                RETURNING count
+            """
+            )
+            return result or 0
+
+
+# Global database instance
+_db_instance: Optional[Database] = None
+
+
+def get_db() -> Database:
+    """Get the global database instance."""
+    if _db_instance is None:
+        raise RuntimeError("Database not initialized")
+    return _db_instance
+
+
+def init_db(database_url: str) -> None:
+    """Initialize global database instance."""
+    global _db_instance
+    _db_instance = Database(database_url)
+
+
+async def setup_database(database_url: str) -> None:
+    """Set up database connection and initialize tables."""
+    init_db(database_url)
+    db = get_db()
+    await db.connect()
+    await db.init_db()

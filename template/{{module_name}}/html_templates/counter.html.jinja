@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Counter - {{ project_name }}</title>
+    <meta name="description" content="Simple counter with PostgreSQL backend">
+    
+    <!-- Security headers -->
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 3rem;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            font-weight: 700;
+        }
+        
+        .counter-display {
+            font-size: 4rem;
+            font-weight: bold;
+            margin: 2rem 0;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .counter-value {
+            transition: all 0.3s ease;
+        }
+        
+        .counter-value.animate {
+            transform: scale(1.2);
+            color: #4CAF50;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 2rem 0;
+        }
+        
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 1rem 2rem;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+        
+        button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .increment-btn {
+            background: rgba(76, 175, 80, 0.3);
+            border-color: rgba(76, 175, 80, 0.5);
+        }
+        
+        .increment-btn:hover:not(:disabled) {
+            background: rgba(76, 175, 80, 0.5);
+        }
+        
+        .refresh-btn {
+            background: rgba(33, 150, 243, 0.3);
+            border-color: rgba(33, 150, 243, 0.5);
+        }
+        
+        .refresh-btn:hover:not(:disabled) {
+            background: rgba(33, 150, 243, 0.5);
+        }
+        
+        .status {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            min-height: 20px;
+        }
+        
+        .status.success {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4CAF50;
+        }
+        
+        .status.error {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+        }
+        
+        .home-link {
+            display: inline-block;
+            margin-top: 2rem;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        
+        .home-link:hover {
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔢 Counter</h1>
+        
+        <div class="counter-display">
+            <span class="counter-value" id="counter-value">Loading...</span>
+        </div>
+        
+        <div class="button-group">
+            <button class="increment-btn" onclick="incrementCounter()" id="increment-btn">
+                Increment +1
+            </button>
+            <button class="refresh-btn" onclick="loadCounter()" id="refresh-btn">
+                Refresh
+            </button>
+        </div>
+        
+        <div class="status" id="status"></div>
+        
+        <a href="/" class="home-link">← Back to Home</a>
+    </div>
+
+    <script>
+        async function loadCounter() {
+            const counterElement = document.getElementById('counter-value');
+            const statusElement = document.getElementById('status');
+            
+            try {
+                const response = await fetch('/api/counter');
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                counterElement.textContent = data.count;
+                statusElement.textContent = 'Counter loaded successfully';
+                statusElement.className = 'status success';
+                
+                // Add animation
+                counterElement.classList.add('animate');
+                setTimeout(() => counterElement.classList.remove('animate'), 300);
+                
+            } catch (error) {
+                counterElement.textContent = 'Error';
+                statusElement.textContent = 'Error loading counter: ' + error.message;
+                statusElement.className = 'status error';
+            }
+        }
+        
+        async function incrementCounter() {
+            const incrementBtn = document.getElementById('increment-btn');
+            const refreshBtn = document.getElementById('refresh-btn');
+            const statusElement = document.getElementById('status');
+            
+            // Disable buttons during request
+            incrementBtn.disabled = true;
+            refreshBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/counter/increment', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                document.getElementById('counter-value').textContent = data.count;
+                statusElement.textContent = 'Counter incremented successfully!';
+                statusElement.className = 'status success';
+                
+                // Add animation
+                const counterElement = document.getElementById('counter-value');
+                counterElement.classList.add('animate');
+                setTimeout(() => counterElement.classList.remove('animate'), 300);
+                
+            } catch (error) {
+                statusElement.textContent = 'Error incrementing counter: ' + error.message;
+                statusElement.className = 'status error';
+            } finally {
+                // Re-enable buttons
+                incrementBtn.disabled = false;
+                refreshBtn.disabled = false;
+            }
+        }
+        
+        // Load counter on page load
+        loadCounter();
+        
+        // Auto-refresh every 10 seconds
+        setInterval(loadCounter, 10000);
+    </script>
+</body>
+</html>

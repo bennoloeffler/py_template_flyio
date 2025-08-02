@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# Fly.io Database Setup Script for ex-19-users-db-counter
+# Creates single Postgres cluster with production and test databases
+
+set -e
+
+echo "🚀 Setting up Fly.io databases for ex-19-users-db-counter"
+
+# Configuration
+KEBAB="{{ project_name }}"
+
+PROD_CLUSTER_NAME="$KEBAB-cluster"
+TEST_CLUSTER_NAME="$KEBAB-cluster-test"
+REGION="fra"
+VM_SIZE="shared-cpu-1x"
+PROD_APP=$KEBAB
+TEST_APP="$KEBAB-test"
+
+
+
+
+echo "📦 Creating Postgres TEST cluster: $TEST_CLUSTER_NAME"
+fly pg create --name "$TEST_CLUSTER_NAME" --region "$REGION" --vm-size "$VM_SIZE"
+
+echo "🔗 Attaching postgres TEST cluster to app $TEST_APP"
+if fly secrets list -a "$TEST_APP" | grep -q "DATABASE_URL"; then
+  echo "🔒 Test app already has DATABASE_URL secret set. DELETING IT..."
+  fly secrets unset DATABASE_URL -a "$TEST_APP"
+  echo "🔒 DELETED"
+fi
+echo "🔗 Attaching..."
+fly pg attach "$TEST_CLUSTER_NAME" -a "$TEST_APP"
+echo "RE-DEPLOYING to use the new DATABASE_URL..."
+fly deploy -c fly.toml
+echo "✅ Test database setup complete!"  
+
+
+echo "📦 Creating Postgres PRODUCTION cluster: $PROD_CLUSTER_NAME"
+fly pg create --name "$PROD_CLUSTER_NAME" --region "$REGION" --vm-size "$VM_SIZE"
+
+echo "🔗 Attaching postgres PRODUCTION cluster database to $PROD_APP"
+if fly secrets list -a "$PROD_APP" | grep -q "DATABASE_URL"; then
+  echo "🔒 Production app already has DATABASE_URL secret set. DELETING IT..."
+  fly secrets unset DATABASE_URL -a "$PROD_APP"
+fi
+fly pg attach "$PROD_CLUSTER_NAME" -a "$PROD_APP"
+fly deploy -c fly.prod.toml
+
+echo "✅ Production database setup complete!"
+echo "📋 Database setup complete!"
+echo ""
+echo "🔍 To verify test databases:"
+echo "  fly pg db list -a $TEST_CLUSTER_NAME"

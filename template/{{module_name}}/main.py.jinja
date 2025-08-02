@@ -1,5 +1,6 @@
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, AsyncGenerator, Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ from slowapi.util import get_remote_address
 from starlette.responses import Response
 
 from {{ module_name }}.config import settings
+from {{ module_name }}.db import get_db, setup_database
 
 # Initialize templates
 templates = Jinja2Templates(directory="{{ module_name }}/html_templates")
@@ -17,12 +19,29 @@ templates = Jinja2Templates(directory="{{ module_name }}/html_templates")
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
-# Create FastAPI app with configuration from settings
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Lifespan context manager for FastAPI startup and shutdown events."""
+    # Startup
+    await setup_database(settings.database_url)
+    yield
+    # Shutdown
+    try:
+        db = get_db()
+        await db.disconnect()
+    except Exception:
+        # Handle case where db might not be initialized
+        pass
+
+
+# Create FastAPI app with configuration from settings and lifespan
 app = FastAPI(
     title=settings.app_title,
     version=settings.app_version,
     description="...",
     debug=settings.debug,
+    lifespan=lifespan,
 )
 
 # Add security headers and CORS middleware
@@ -79,6 +98,7 @@ def root(request: Request) -> Any:
             {"icon": "🏥", "name": "Health", "url": "/health"},
             {"icon": "👋", "name": "Hello", "url": "/hello"},
             {"icon": "🕐", "name": "Time", "url": "/time"},
+            {"icon": "🔢", "name": "Counter", "url": "/counter"},
         ],
     }
     return templates.TemplateResponse("index.html", {"request": request, **context})
@@ -110,6 +130,33 @@ def health_check(request: Request) -> Dict[str, Any]:
     }
 
 
+@app.get("/counter")
+async def counter_page(request: Request) -> Any:
+    """Counter UI page."""
+    return templates.TemplateResponse("counter.html", {"request": request})
+
+
+@app.get("/api/counter")
+async def get_counter(request: Request) -> Dict[str, Any]:
+    """Get current counter value."""
+    try:
+        count = await get_db().get_count()
+        return {"count": count}
+    except Exception as e:
+        return {"error": str(e), "count": 0}
+
+
+@app.post("/api/counter/increment")
+@limiter.limit("60/minute")
+async def increment_counter(request: Request) -> Dict[str, Any]:
+    """Increment counter and return new value."""
+    try:
+        new_count = await get_db().increment_count()
+        return {"count": new_count, "success": True}
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+
 def main() -> None:
     """Main entry point for the FastAPI application."""
     import uvicorn
@@ -125,4 +172,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 

@@ -4,9 +4,11 @@ echo "=========================================="
 echo "DO ALL CHECKS PASS?"
 echo "HAVE YOU RUN ./check.sh?"
 echo "=========================================="
-read -p "Shall I do it now?... (n/Y) " -r
+read -p "Shall I do it now?... (N/y) " -r
 
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [[ $REPLY =~ ^[Nn]$ ]]; then
+    echo "Skipping checks, proceeding with launch..."
+else
     echo "Running checks..."
     if ./check.sh; then
         echo "=========================================="
@@ -18,8 +20,6 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "=========================================="
         exit 1
     fi
-else
-    echo "Skipping checks, proceeding with launch..."
 fi
 
 flyctl launch --name '{{project_name}}' --region fra  --yes --now

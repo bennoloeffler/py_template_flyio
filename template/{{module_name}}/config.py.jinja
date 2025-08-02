@@ -39,13 +39,14 @@ class Settings(BaseSettings):
         description="List of allowed CORS origins",
     )
 
+
     # Database
     database_url: str = Field(
-        default="sqlite:///./{{ module_name }}.db",
+        default="postgresql://postgres:postgres@localhost/{{ module_name }}",
         description="Database connection string",
     )
     database_test_url: str = Field(
-        default="sqlite:///./{{ module_name }}_test.db",
+        default="postgresql://postgres:postgres@localhost/{{ module_name }}_test",
         description="Test database connection string",
     )
 
