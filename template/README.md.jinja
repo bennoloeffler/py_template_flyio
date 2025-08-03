@@ -10,7 +10,7 @@ call
 claude mcp add context7 -- npx -y @upstash/context7-mcp
 
 # add postgress mcp: use right db and pw
-claude mcp add pg npx @executeautomation/database-server -- --postgresql --host localhost --database DATABASE_NAME --user postgres --password SowasWiexr600rOderCb400R
+claude mcp add pg npx @executeautomation/database-server -- --postgresql --host localhost --database {{ module_name }} --user $PG_USER --password $PG_PASSWORD
 
 # to use moonshot.ch as model for claude
 source set_kimi_as_antrophic.sh
