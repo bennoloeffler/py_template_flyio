@@ -1,0 +1,181 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Important Documentation Files
+- **Design & Vision**: `docs/design.md` - User stories, page structure, and movement philosophy
+- **Technical Requirements**: `docs/requirements.md` - Tech stack, data models, and security requirements
+- **Development Progress**: `docs/todos.md` - Phased implementation roadmap and current status
+
+## for your coding practice, there are some important rules:
+1. Start by analysing features and document the feature and update the documentation.
+   Features get a name and the place to document them are here:
+   `docs/features_concepts/<feature_name>.md`
+2. implement tests (for the backend - not the frontend!)
+3. implement the feature - carefully decide to create DRY modules. In doubt, read:
+   file `CLAUDE_BBS.md` - do not over-engineer. BUT CREATE REUSABLE COMPONENTS. BBS style.
+4. ASSUME THE SERVER IS RUNNING, when you want to check for backend logic with curl
+   Tell me, if it is not running.
+   You may assume that there is an server.log file that is written to by the server running by the command:
+   `uv run uvicorn {{ module_name }}.main:app --reload --port 8877 2>&1 | tee server.log`
+   You may read the current last log entries by something like:
+   file server.log # that you may read with:
+   `tail -n 300 server.log`
+5. run all tests (with `pytest` or even more intense `./check.sh`)
+6. iterate on the feature until tests are running and user is satisfied
+7. if feature is implemented: 
+   update the docs
+   then commit (or ask the user to do so)
+
+## Development Commands
+
+### Quick Development
+```bash
+# Run application with auto-reload on port 8877
+uv run uvicorn {{ module_name }}.main:app --reload --port 8877
+
+# Run all tests
+uv run pytest
+
+# Run comprehensive quality checks (formatting, linting, type checking, tests)
+./check.sh
+
+# Watch tests during development
+uv run pytest-watch
+
+# start with:
+uv run uvicorn {{ module_name }}.main:app --reload --port 8877 2>&1 | tee server.log
+
+# then you will find:
+file server.log # that you may read with:
+tail -n 300 server.log
+
+```
+
+### Package Management
+- Use `uv add <package>` to install new dependencies
+- Use `uv sync` to sync dependencies
+- Use `uv remove <package>` to remove packages
+- **NEVER** use pip directly - always use uv
+
+### Quality Assurance Pipeline
+```bash
+# Complete development pipeline (runs in this order):
+./check.sh  # Executes:
+1. uv run black .          # Code formatting
+2. ruff check --fix .      # Linting with auto-fix
+3. mypy .                 # Type checking
+4. uv run pytest          # All tests
+5. pytest                 # All tests, shorter
+
+# Always run ./check.sh before committing changes
+```
+
+### Database Operations
+```bash
+# Start fresh database (destructive - drops all tables)
+# DO THAT ONLY, WHEN USER TELLS TO DELETE /DROP the database! OTHERWISE: DONT!
+DROP_TABLES_BEFORE_INIT=true uv run uvicorn {{ module_name }}.main:app --reload --port 8877
+
+
+# Normal development (preserves data) DONT RUN THAT. ASSUME IT IS RUNNING.
+uv run uvicorn {{ module_name }}.main:app --reload --port 8877
+```
+
+### Deployment
+```bash
+
+# Deploy to test environment
+./fly_deploy_test.sh
+
+# Deploy to production
+./fly_deploy_prod.sh
+```
+
+## Architecture Overview
+
+### Core Components & Black Box Boundaries
+
+#### 1. **Application Layer** (`{{ module_name }}/main.py`)
+- **Primary Interface**: FastAPI application with rate limiting, CORS, and HTML templates
+- **Authentication**: JWT-based auth with role-based access control (admin/user/visitor)
+- **Rate Limiting**: Configurable limits per endpoint using slowapi
+- **HTML Rendering**: Jinja2 templates for web interface
+- **File Integration**: Static file serving and upload endpoints
+
+#### 2. **File Management System** (`{{ module_name }}/upload_files.py`)
+- **Black Box**: Complete file upload/download system with PostgreSQL BYTEA storage
+- **Features**: Unique filename generation, thumbnail creation, file type validation
+- **Architecture**: Files stored in database with metadata, not filesystem
+- **Interface**: FileService class with upload/download/list/delete operations
+- **Security**: File size limits (10MB), content type validation, user ownership
+
+#### 3. **Database Layer** (`{{ module_name }}/db.py`)
+- **Black Box**: PostgreSQL connection pool with async operations
+- **Interface**: Clean API for users/companies/events/files management
+- **Features**: Connection pooling, password hashing, table initialization
+- **Migration System**: `db_migrate.py` handles schema evolution with backup/restore
+- **Replaceable**: Could swap PostgreSQL for another database by implementing same interface
+
+#### 4. **Data Models** (`{{ module_name }}/models.py`)
+- **Primitives**: User, Company, Event, ContactRequest, File schemas
+- **Validation**: Pydantic models with comprehensive field validation
+- **Security**: Separation of internal vs public data models
+- **API Response Handling**: Special handling for datetime serialization
+
+#### 5. **Configuration Management** (`{{ module_name }}/config.py`)
+- **Black Box**: Centralized settings with Pydantic BaseSettings
+- **Interface**: Environment variables with sensible defaults
+- **Security**: Secret key management and admin password synchronization
+
+### Key Architectural Patterns
+
+#### Black Box Design Principles
+- **Database Layer**: Complete abstraction - implementation details hidden behind clean API
+- **Authentication**: Modular JWT implementation - could be replaced with OAuth2
+- **Configuration**: Environment-agnostic settings management
+
+#### Data Flow Primitives
+- **User Data**: email, role, status, full_name, phone, company details, about sections, portrait_url
+- **Company Data**: name, coordinates (x,y), logo_url, description, website, is_active
+- **Event Data**: title, from_to, day_for_sorting, location, description, registration_url, image_url, pdf_url
+- **File Data**: filename, original_filename, content_type, file_size, data (BYTEA), thumbnail_type
+- **Authentication**: JWT tokens with email and role claims
+
+#### Interface Contracts
+- **Database Interface**: Consistent async methods for CRUD operations with datetime handling
+- **API Endpoints**: RESTful design with proper HTTP status codes and datetime serialization
+- **Template Context**: Standardized context objects with computed fields for all pages
+
+### Security Architecture
+- **Role-Based Access**: admin, user, visitor hierarchy
+- **Password Hashing**: bcrypt with passlib context
+- **JWT Tokens**: HS256 algorithm with configurable expiration
+- **Environment Master**: ADMIN_PASSWORD environment variable controls admin access
+- **Rate Limiting**: Per-endpoint configurable limits
+
+
+### Development Guidelines (from .cursor/rules)
+- **Pure Functions**: Write functions without side effects
+- **Type Safety**: Use Pydantic for all data validation
+- **DRY Principle**: Factor out common code and values
+- **API Design**: Clear, documented interfaces for all components
+- **Testing**: Write tests for all new features
+- **Code Quality**: Run `./check.sh` after implementing features
+- **File Size**: Split files when they exceed 300 lines
+- **Line Length**: Maximum 78 characters per line
+
+
+### MCP Server Integration
+- **context7**: Library documentation retrieval
+- **PostgreSQL MCP**: Database operations and query execution
+
+Setup commands for MCP servers are documented in README.md.
+
+
+---
+
+**Remember**: This system follows Black Box Design principles. Each module should be replaceable using only its public interface. Focus on maintaining clean boundaries between components.
+- You should assume that the server is running. Don't start it or ask the user to start it. The code is reloaded automatically!
+- Practical Perspective: Acknowledges this is a hobby project with ~100 users and ~1000 files, not an
+  enterprise system

@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -e
+
+echo "🚀 Setting up Fly.io databases for {{ project_name }}"
+
+KEBAB="{{ project_name }}"
+
+PROD_CLUSTER_NAME="$KEBAB-cluster"
+REGION="fra"
+VM_SIZE="shared-cpu-1x"
+PROD_APP=$KEBAB
+
+
+echo "📦 Creating Postgres PRODUCTION cluster: $PROD_CLUSTER_NAME"
+fly pg create --name "$PROD_CLUSTER_NAME" --region "$REGION" --vm-size "$VM_SIZE"
+
+echo "🔗 Attaching postgres PRODUCTION cluster database to $PROD_APP"
+if fly secrets list -a "$PROD_APP" | grep -q "DATABASE_URL"; then
+  echo "🔒 Production app already has DATABASE_URL secret set. DELETING IT..."
+  fly secrets unset DATABASE_URL -a "$PROD_APP"
+fi
+fly pg attach "$PROD_CLUSTER_NAME" -a "$PROD_APP"
+echo "RE-DEPLOYING to use the new DATABASE_URL..."
+fly deploy -c fly.prod.toml
+
+echo "✅ Production database setup complete!"
+echo "📋 Database setup complete!"
+echo ""
+echo "🔍 To verify prod databases:"
+echo "  fly pg db list -a $PROD_CLUSTER_NAME"

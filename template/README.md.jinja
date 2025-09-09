@@ -7,10 +7,13 @@
 call 
 ``` bash
 # add context7 mcp
-claude mcp add context7 -- npx -y @upstash/context7-mcp
+claude mcp add -s user context7 -- npx -y @upstash/context7-mcp
 
 # add postgress mcp: use right db and pw
-claude mcp add pg npx @executeautomation/database-server -- --postgresql --host localhost --database {{ module_name }} --user $PG_USER --password $PG_PASSWORD
+claude mcp add -s user pg npx @executeautomation/database-server -- --postgresql --host localhost --database {{ module_name }} --user $PG_USER --password $PG_PASSWORD
+
+# send "all files in one shot" to gemini
+claude mcp add -s user consult7 uvx -- consult7 google AIxxxxxxxxxxJU
 
 # to use moonshot.ch as model for claude
 source set_kimi_as_antrophic.sh
