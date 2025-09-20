@@ -15,6 +15,23 @@ claude mcp add -s user pg npx @executeautomation/database-server -- --postgresql
 # send "all files in one shot" to gemini
 claude mcp add -s user consult7 uvx -- consult7 google AIxxxxxxxxxxJU
 
+# memory bank for ONE PROJECT
+claude mcp add --scope user memory-bank -e MEMORY_BANK_ROOT=~/.claude/memory-bank -- npx -y @allpepper/memory-bank-mcp
+
+# knowledge about ALL PROJECTS
+claude mcp add --scope user knowledge-graph -e GRAPH_STORAGE_PATH=~/.claude/knowledge-graph -- npx -y mcp-knowledge-graph
+
+# HAS A BUG"!
+# have a kind of cheap RAG 
+# add a dir
+leann build my-docs-name --docs ./your_documents
+# add mcp server
+claude mcp add --scope user leann-server -- leann_mcp
+https://github.com/yichuan-w/LEANN
+
+# debug by reading and clicking browser
+claude mcp add --scope user puppeteer npx @agent-infra/mcp-server-browser@latest
+
 # to use moonshot.ch as model for claude
 source set_kimi_as_antrophic.sh
 claude
