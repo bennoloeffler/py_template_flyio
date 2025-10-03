@@ -632,3 +632,32 @@ async def migrate_database() -> None:
     except Exception as e:
         logger.error(f"Migration failed: {e}")
         raise
+
+
+if __name__ == "__main__":
+    """Run migrations when called directly."""
+    import asyncio
+    import sys
+
+    async def run_migrations():
+        """Run database migrations."""
+        from {{ module_name }}.config import settings
+        from {{ module_name }}.db import setup_database
+
+        try:
+            # Setup database connection
+            await setup_database(settings.database_url)
+
+            # Run migrations
+            await migrate_database()
+
+            logger.info("✅ All migrations completed successfully!")
+            logger.info(f"📧 Admin user: admin@{{ project_name }}.de")
+            if ADMIN_PASSWORD == "admin123":
+                logger.warning("⚠️  Remember to change the default admin password!")
+
+        except Exception as e:
+            logger.error(f"❌ Migration failed: {e}")
+            sys.exit(1)
+
+    asyncio.run(run_migrations())
