@@ -6,7 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Design & Vision**: `docs/design.md` - User stories, page structure, and movement philosophy
 - **Technical Requirements**: `docs/requirements.md` - Tech stack, data models, and security requirements
 - **Development Progress**: `docs/todos.md` - Phased implementation roadmap and current status
-
+## Working with spec-kit
+- if the command /specify /plan or /task is used, have a look at
+  files: README.md docs/design.md docs/requirements.md docs/todos.md - you may find all the hints you need.
+  
 ## for your coding practice, there are some important rules:
 1. Start by analysing features and document the feature and update the documentation.
    Features get a name and the place to document them are here:
@@ -16,22 +19,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    file `CLAUDE_BBS.md` - do not over-engineer. BUT CREATE REUSABLE COMPONENTS. BBS style.
 4. ASSUME THE SERVER IS RUNNING, when you want to check for backend logic with curl
    Tell me, if it is not running.
-   You may assume that there is an server.log file that is written to by the server running by the command:
+   You always assume that there is an server.log file that is written to by the server running by the command:
    `uv run uvicorn {{ module_name }}.main:app --reload --port 8877 2>&1 | tee server.log`
    You may read the current last log entries by something like:
    file server.log # that you may read with:
    `tail -n 300 server.log`
-5. run all tests (with `pytest` or even more intense `./check.sh`)
+5. run all tests (with `uv run pytest` or even more intense `./check.sh`)
 6. iterate on the feature until tests are running and user is satisfied
 7. if feature is implemented: 
    update the docs
-   then commit (or ask the user to do so)
+   then git commit (or ask the user to do so)
 
 ## Development Commands
 
 ### Quick Development
 ```bash
+
+# start backend with, writing logs to file server.log
+# ALWAYS ASSUME, THIS IS RUNNING - if NOT ASK USER TO START THIS MANUALLY
+uv run uvicorn {{ module_name }}.main:app --reload --port 8877 2>&1 | tee server.log
+
 # Run application with auto-reload on port 8877
+# DONT USE THAT WITH CLAUDE - ony use it if server logs are not important to read by claude code
 uv run uvicorn {{ module_name }}.main:app --reload --port 8877
 
 # Run all tests
@@ -43,11 +52,8 @@ uv run pytest
 # Watch tests during development
 uv run pytest-watch
 
-# start with:
-uv run uvicorn {{ module_name }}.main:app --reload --port 8877 2>&1 | tee server.log
-
-# then you will find:
-file server.log # that you may read with:
+# For debugging: claude will be able to read server logs
+# in file server.log with command 
 tail -n 300 server.log
 
 ```
@@ -74,15 +80,12 @@ tail -n 300 server.log
 ### Database Operations
 ```bash
 # Start fresh database (destructive - drops all tables)
-# DO THAT ONLY, WHEN USER TELLS TO DELETE /DROP the database! OTHERWISE: DONT!
+# DO THAT ONLY, WHEN USER TELLS TO DELETE / DROP the database! OTHERWISE: DONT!
 DROP_TABLES_BEFORE_INIT=true uv run uvicorn {{ module_name }}.main:app --reload --port 8877
 
-
-# Normal development (preserves data) DONT RUN THAT. ASSUME IT IS RUNNING.
-uv run uvicorn {{ module_name }}.main:app --reload --port 8877
 ```
 
-### Deployment
+### Deployment to fly.io
 ```bash
 
 # Deploy to test environment
@@ -118,7 +121,7 @@ uv run uvicorn {{ module_name }}.main:app --reload --port 8877
 - **Replaceable**: Could swap PostgreSQL for another database by implementing same interface
 
 #### 4. **Data Models** (`{{ module_name }}/models.py`)
-- **Primitives**: User, Company, Event, ContactRequest, File schemas
+- **Primitives**: User, File schemas
 - **Validation**: Pydantic models with comprehensive field validation
 - **Security**: Separation of internal vs public data models
 - **API Response Handling**: Special handling for datetime serialization
@@ -137,8 +140,6 @@ uv run uvicorn {{ module_name }}.main:app --reload --port 8877
 
 #### Data Flow Primitives
 - **User Data**: email, role, status, full_name, phone, company details, about sections, portrait_url
-- **Company Data**: name, coordinates (x,y), logo_url, description, website, is_active
-- **Event Data**: title, from_to, day_for_sorting, location, description, registration_url, image_url, pdf_url
 - **File Data**: filename, original_filename, content_type, file_size, data (BYTEA), thumbnail_type
 - **Authentication**: JWT tokens with email and role claims
 

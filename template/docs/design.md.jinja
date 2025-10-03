@@ -1,10 +1,33 @@
 # Design Document for {{ project_name }}
 
-## Overview
+## Project Vision
 
 ## Concepts from the users perspective (basis for data model)
+Users: may be admins, users and visitors.
+users may upload files, download files from all users and delete their own files.
+visitors may search, view and download files from all users.
+admins may also in addition delete users and files from all users)
 
-## User Stories
+Files: upload all sorts of text and binary files like md, docx, pdf, ... 
+store them im backend.
+create a url so they may be downloaded or used in other sites.
 
-## Isolated Building Blocks / System-Components
+
+## User Stories (interactions from users perspective)
+
+visitor:
+- view latest 200 uploaded files of all users as preview and url. 
+- filter to search (either for title of the document or for users uploads or combination)
+- download file.
+- register as user
+
+user: (in addition to visitor)
+upload file
+delete my file
+delete my account
+
+admin: (in addition to user)
+delete user
+delete ANY file
+
 

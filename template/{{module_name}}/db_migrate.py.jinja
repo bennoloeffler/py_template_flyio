@@ -1,0 +1,552 @@
+"""
+DATABASE MIGRATION SYSTEM (JUST SQL MIGRATION - JSM)
+
+WHAT THIS DOES:
+This module handles automatic database schema changes when the application starts.
+It safely transforms your existing data using the JUST SQL MIGRATION (JSM) approach.
+
+HOW JSM WORKS:
+1. Check what migration step we're currently on
+2. Back up all existing data tables (with names like users_migration_0_backup)
+3. Execute JSM SQL operations in sequence:
+   - Table structure alterations (DROP/CREATE, ALTER TABLE, etc.)
+   - Data copy/transformation operations (INSERT...SELECT FROM backup tables)
+   - Index creation and constraint setup
+   - Sequence resets and cleanup operations
+4. Record completion in migration_steps table
+
+SAFETY FEATURES:
+- Everything runs in ONE BIG TRANSACTION - if anything fails, ALL changes are undone
+- Extensive logging shows exactly what's happening at each step
+- Backup tables are kept so data is never lost
+- Validation checks ensure assumptions are correct
+
+FOR NEW DEVELOPERS:
+- Migration steps are defined in the migration_steps list below
+- Each step uses the JSM field "sql_alter_tables_and_copy_data" for all SQL operations
+- Add new migration steps by appending to the migration_steps list
+- Never modify existing migration steps (would break existing databases)
+
+JSM MIGRATION STEP FORMAT:
+{
+    "step": 1,                                    # Sequential number
+    "data_tables_to_backup": ["users", "events"], # Tables to backup before changes
+    "description": "Add profile photos to users", # Human-readable description
+    "sql_alter_tables_and_copy_data": [           # JSM SQL operations list
+        "ALTER TABLE users ADD COLUMN photo_url VARCHAR(500);",
+        "INSERT INTO users SELECT *, NULL FROM users_migration_1_backup;",
+        "SELECT setval('users_id_seq', MAX(id)) FROM users;"
+    ]
+}
+
+"""
+
+import logging
+from typing import Any, Dict
+
+import asyncpg
+
+# Configure comprehensive logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# MIGRATION SYSTEM CONSTANTS
+NO_MIGRATIONS_COMPLETED = -1  # Sentinel: no migrations have run yet
+FIRST_MIGRATION_STEP = 0  # Migration steps start at 0
+
+# Logging configuration constants
+SQL_LOG_PREVIEW_LENGTH = 100  # How many characters of SQL to show in logs
+ERROR_MESSAGE_MAX_LENGTH = 200  # Truncate long error messages
+LARGE_TABLE_THRESHOLD = 100000  # Warn when backing up tables with more rows
+
+# MIGRATION STEP DATA STRUCTURE
+# List of migration steps - this is the single source of truth for all migrations
+#
+# Each migration step supports these fields:
+# - "step": Migration step number (0, 1, 2, etc.)
+# - "data_tables_to_backup": List of table names to backup before alterations
+# - "description": Human-readable description of what this migration does
+# - "sql_alter_tables_and_copy_data": List of SQL statements for table alterations and data operations
+
+
+migration_steps = [
+]
+
+
+def log_migration_error(
+    operation_name: str, step_number: int, error: Exception, context: str = ""
+) -> None:
+    """
+    Centralized error logging for migration failures with consistent format.
+
+    Args:
+        operation_name: What operation failed (e.g. "SQL execution", "Backup creation")
+        step_number: Which migration step was running
+        error: The actual exception that occurred
+        context: Additional context (SQL snippet, table names, etc.)
+    """
+    logger.error(
+        f"❌ {operation_name} failed for migration step {step_number}: {error}"
+    )
+    if context:
+        logger.error(f"Context: {context}")
+    logger.error("🔄 Entire migration will be rolled back due to this failure")
+
+
+def escape_identifier(name: str) -> str:
+    """
+    Safely escape SQL identifiers (table names, column names) to prevent SQL injection.
+    This is a simple implementation - in production, consider using asyncpg's SQL builder.
+
+    Args:
+        name: The identifier to escape
+
+    Returns:
+        Safely quoted identifier
+    """
+    # Basic escaping: wrap in quotes and escape any existing quotes
+    return '"' + name.replace('"', '""') + '"'
+
+
+class DatabaseMigrator:
+    """
+    Data-driven database migrator that implements the complete migration logic
+    as specified in the requirements comments.
+    """
+
+    def __init__(self, db_pool: asyncpg.Pool):
+        """Initialize migrator with database pool."""
+        self.db_pool = db_pool
+        logger.info("DatabaseMigrator initialized")
+
+    async def migrate_database(self) -> None:
+        """
+        Main migration function implementing the JUST SQL MIGRATION (JSM) approach:
+
+        LOGIC IMPLEMENTATION:
+        1. Check if migration_steps table exists
+        2. Handle existing data with backups
+        3. Apply ALL pending migrations in ONE HUGE ATOMIC TRANSACTION
+        4. Execute JSM SQL operations (table alterations and data operations in sequence)
+        5. Record migration completion
+        6. Intensive error logging with assumption checking
+
+        CRITICAL: The entire migration process runs in a single transaction.
+        If ANY step fails, ALL changes are rolled back automatically.
+        """
+        logger.info("=== Starting database migration process ===")
+
+        async with self.db_pool.acquire() as conn:
+            # Check for DROP_TABLES_BEFORE_INIT environment variable
+            import os
+
+            if os.getenv("DROP_TABLES_BEFORE_INIT", "false").lower() == "true":
+                logger.info(
+                    "🔥 DROP_TABLES_BEFORE_INIT=true detected - dropping all tables for fresh start"
+                )
+                await self._drop_all_tables_for_fresh_start(conn)
+
+            # MIGRATE LOGIC STEP 1: Check if this is first migration (outside transaction)
+            migration_needed = await self._check_migration_needed(conn)
+
+            if not migration_needed:
+                logger.info("ALL MIGRATIONS ARE UP TO DATE. NOTHING TO DO.")
+                return
+
+            # MIGRATE LOGIC STEP 11: ONE HUGE ATOMIC TRANSACTION FOR ENTIRE MIGRATION PROCESS
+            logger.info(
+                "🔒 Starting ATOMIC migration transaction - all steps will succeed or all will be rolled back"
+            )
+            try:
+                async with conn.transaction():
+                    # MIGRATE LOGIC STEP 2-12: Apply pending migrations
+                    await self._apply_pending_migrations(conn)
+
+                    logger.info("🔓 Migration transaction committed successfully")
+                    logger.info("=== Database migration completed successfully ===")
+
+            except Exception as e:
+                logger.error(f"💥 CRITICAL: Database migration failed: {e}")
+                logger.error(
+                    "🔄 ALL CHANGES HAVE BEEN ROLLED BACK - database is in original state"
+                )
+                logger.error("No manual cleanup required - transaction was atomic")
+                logger.error("")
+                logger.error("🔧 RECOVERY STEPS:")
+                logger.error("  1. Check database connectivity and permissions")
+                logger.error(
+                    "  2. Review migration_steps data structure for syntax errors"
+                )
+                logger.error(
+                    "  3. Check application logs above for detailed SQL error messages"
+                )
+                logger.error(
+                    "  4. Verify backup tables exist if this is not the first migration"
+                )
+                logger.error("  5. Contact development team if issue persists")
+                logger.error("")
+                logger.error(
+                    "💡 TIP: The database is unchanged - safe to retry after fixing the issue"
+                )
+                raise
+
+    async def _drop_all_tables_for_fresh_start(self, conn: asyncpg.Connection) -> None:
+        """
+        Drop all tables in the database for a complete fresh start.
+        This includes the schema_steps table which will be recreated.
+
+        Used when DROP_TABLES_BEFORE_INIT=true environment variable is set.
+        """
+        logger.info("🔥 Starting complete database table cleanup...")
+
+        try:
+            # Get all table names in the database
+            tables_query = """
+                SELECT tablename 
+                FROM pg_tables 
+                WHERE schemaname = 'public'
+                ORDER BY tablename;
+            """
+
+            rows = await conn.fetch(tables_query)
+            table_names = [row["tablename"] for row in rows]
+
+            if not table_names:
+                logger.info("✅ No tables found - database already empty")
+                return
+
+            logger.info(
+                f"📋 Found {len(table_names)} tables to drop: {', '.join(table_names)}"
+            )
+
+            # Drop all tables with CASCADE to handle foreign key dependencies
+            for table_name in table_names:
+                logger.info(f"🗑️  Dropping table: {table_name}")
+                drop_sql = f"DROP TABLE IF EXISTS {table_name} CASCADE;"
+                await conn.execute(drop_sql)
+
+            logger.info("✅ All tables dropped successfully - database is now empty")
+
+        except Exception as e:
+            logger.error(f"❌ Error during table cleanup: {e}")
+            raise RuntimeError(f"Failed to drop tables for fresh start: {e}") from e
+
+    async def _check_migration_needed(self, conn: asyncpg.Connection) -> bool:
+        """
+        MIGRATE LOGIC STEP 1: Check what migrations are needed.
+        Returns True if migrations are needed, False if all up to date.
+
+        Note: We don't check for migration_steps table existence here anymore -
+        it's created automatically when needed.
+        """
+        logger.info("Checking if migrations are needed...")
+
+        # Ensure migration_steps table exists - create it automatically if needed
+        await self._ensure_migration_steps_table_exists(conn)
+
+        # Get highest completed migration step
+        # COALESCE(value, default) returns the default if value is NULL
+        # MAX(step) returns NULL when migration_steps table is empty
+        # So COALESCE(MAX(step), -1) means: "highest step number, or -1 if no steps completed yet"
+        highest_step = await conn.fetchval(
+            """
+            SELECT COALESCE(MAX(step), $1) FROM migration_steps;
+        """,
+            NO_MIGRATIONS_COMPLETED,
+        )
+
+        # Check against available migration steps
+        available_steps = [step["step"] for step in migration_steps]
+        max_available = (
+            max(available_steps) if available_steps else NO_MIGRATIONS_COMPLETED
+        )
+
+        logger.info(
+            f"Highest completed step: {highest_step}, Highest available step: {max_available}"
+        )
+
+        if highest_step < max_available:
+            logger.info(
+                f"Migration needed: {max_available - highest_step} pending steps"
+            )
+            return True
+        else:
+            logger.info("All migrations are up to date")
+            return False
+
+    async def _apply_pending_migrations(self, conn: asyncpg.Connection) -> None:
+        """
+        MIGRATE LOGIC STEP 2-12: Apply all pending migrations in sequence.
+        NOTE: This runs inside the main atomic transaction - no individual transactions here.
+        """
+        logger.info("Applying pending migrations...")
+
+        # Ensure migration_steps table exists - create it automatically if needed
+        await self._ensure_migration_steps_table_exists(conn)
+
+        # Get current migration step
+        # COALESCE(MAX(step), -1) = "highest completed step, or -1 if none completed"
+        current_step = await conn.fetchval(
+            "SELECT COALESCE(MAX(step), $1) FROM migration_steps;",
+            NO_MIGRATIONS_COMPLETED,
+        )
+
+        logger.info(f"Starting from migration step: {current_step}")
+
+        # MIGRATE LOGIC STEP 10: Loop through pending migrations
+        for step_data in migration_steps:
+            if step_data["step"] > current_step:
+                logger.info(
+                    f"=== Applying migration step {step_data['step']}: {step_data['description']} ==="
+                )
+
+                try:
+                    await self._apply_single_migration_step(conn, step_data)
+
+                    # MIGRATE LOGIC STEP 8: Record migration completion
+                    await self._record_migration_completion(conn, step_data)
+
+                    logger.info(
+                        f"✅ Migration step {step_data['step']} completed successfully"
+                    )
+
+                except Exception as e:
+                    logger.error(f"❌ Migration step {step_data['step']} failed: {e}")
+                    logger.error(
+                        "🔄 Entire migration will be rolled back due to this failure"
+                    )
+                    raise
+
+    async def _apply_single_migration_step(
+        self, conn: asyncpg.Connection, step_data: Dict[str, Any]
+    ) -> None:
+        """
+        Apply a single migration step with JUST SQL MIGRATION (JSM) approach:
+
+        STEP PROCESS:
+        1. Create backup tables for data safety
+        2. Execute JSM SQL operations (alterations + data operations)
+
+        Uses the JSM field 'sql_alter_tables_and_copy_data' for all SQL operations.
+        """
+        # MIGRATE LOGIC STEP 2: Create backups with proper naming
+        await self._create_backup_tables(conn, step_data)
+
+        # MIGRATE LOGIC STEP 3: Execute JSM SQL operations
+        # Handles table alterations, data transformations, and copy operations in sequence
+        await self._execute_sql_alterations(conn, step_data)
+
+    async def _create_backup_tables(
+        self, conn: asyncpg.Connection, step_data: Dict[str, Any]
+    ) -> None:
+        """
+        Create backup tables with naming schema <table_name>_migration_$STEP_backup.
+        Includes intensive assumption checking.
+        """
+        step_num = step_data["step"]
+        tables_to_backup = step_data.get("data_tables_to_backup", [])
+
+        logger.info(f"Creating backup tables for step {step_num}: {tables_to_backup}")
+
+        for table_name in tables_to_backup:
+            backup_table_name = f"{table_name}_migration_{step_num}_backup"
+
+            table_exists = await conn.fetchval(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' AND table_name = $1
+                );
+            """,
+                table_name,
+            )
+
+            if not table_exists:
+                logger.error(
+                    f"CRITICAL ERROR: Table '{table_name}' specified for backup does not exist!"
+                )
+                logger.error("This could be due to:")
+                logger.error("Misspelled table name in migration data")
+                logger.error("")
+                logger.error(
+                    "SAFETY CHECK: Cannot proceed with migration - may cause data loss!"
+                )
+                logger.error(
+                    f"Please verify table names in migration step {step_data['step']}"
+                )
+                raise ValueError(
+                    f"Table '{table_name}' specified for backup does not exist - cannot safely proceed"
+                )
+
+            backup_exists = await conn.fetchval(
+                """
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' AND table_name = $1
+                );
+            """,
+                backup_table_name,
+            )
+
+            if backup_exists:
+                logger.error(
+                    f"ASSUMPTION FAILED: Backup table collision - {backup_table_name} already exists"
+                )
+                raise ValueError(
+                    f"Backup table collision: {backup_table_name} already exists"
+                )
+
+            # Create backup table so we can safely transform data later
+            # Pattern: original_table_name_migration_N_backup where N is the step number
+            # This preserves all original data in case migration fails or needs rollback
+            backup_sql = f"CREATE TABLE {escape_identifier(backup_table_name)} AS SELECT * FROM {escape_identifier(table_name)}"
+            await conn.execute(backup_sql)
+
+            # Verify backup was created successfully by comparing row counts
+            backup_count = await conn.fetchval(
+                f"SELECT COUNT(*) FROM {escape_identifier(backup_table_name)}"
+            )
+            original_count = await conn.fetchval(
+                f"SELECT COUNT(*) FROM {escape_identifier(table_name)}"
+            )
+
+            # Warn about large table backups (they might take time)
+            if original_count > LARGE_TABLE_THRESHOLD:
+                logger.warning(
+                    f"Created backup of large table {table_name} ({original_count:,} rows) - this took extra time"
+                )
+
+            if backup_count != original_count:
+                logger.error(
+                    f"ASSUMPTION FAILED: Backup verification failed for {table_name}"
+                )
+                raise ValueError(
+                    f"Backup verification failed: {table_name} has {original_count} rows but backup has {backup_count}"
+                )
+
+            logger.info(
+                f"✅ Created backup {backup_table_name} with {backup_count} rows"
+            )
+
+    async def _execute_sql_alterations(
+        self, conn: asyncpg.Connection, step_data: Dict[str, Any]
+    ) -> None:
+        """
+        Execute SQL table alterations and data operations in sequence.
+        Uses sql_alter_tables_and_copy_data field for JUST SQL MIGRATION (JSM) operations.
+        """
+        sql_operations = step_data.get("sql_alter_tables_and_copy_data", [])
+
+        if not sql_operations:
+            logger.info("No SQL operations to execute for this step")
+            return
+
+        logger.info(
+            f"Executing {len(sql_operations)} SQL operations (table alterations and data operations)"
+        )
+
+        for i, sql in enumerate(sql_operations):
+            try:
+                sql_preview = (
+                    sql.strip()[:SQL_LOG_PREVIEW_LENGTH] + "..."
+                    if len(sql.strip()) > SQL_LOG_PREVIEW_LENGTH
+                    else sql.strip()
+                )
+                logger.info(f"🔧 Executing SQL operation {i+1}: {sql_preview}")
+
+                await conn.execute(sql)
+                logger.info(f"✅ SQL operation {i+1} executed successfully")
+
+            except Exception as e:
+                error_msg = (
+                    str(e)[:ERROR_MESSAGE_MAX_LENGTH] + "..."
+                    if len(str(e)) > ERROR_MESSAGE_MAX_LENGTH
+                    else str(e)
+                )
+                logger.error(f"❌ SQL operation {i+1} failed: {error_msg}")
+                logger.error(f"Failed SQL: {sql}")
+                raise RuntimeError(f"SQL operation failed at step {i+1}: {e}") from e
+
+    async def _ensure_migration_steps_table_exists(
+        self, conn: asyncpg.Connection
+    ) -> None:
+        """
+        Automatically create the migration_steps table if it doesn't exist.
+        This is system infrastructure - users shouldn't have to worry about it.
+
+        The migration_steps table tracks which migrations have been completed:
+        - step: The migration step number (0, 1, 2, etc.)
+        - description: Human-readable description of what the migration did
+        - created_at: When the migration completed
+        """
+        table_exists = await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'migration_steps'
+            );
+        """
+        )
+
+        if not table_exists:
+            logger.info(
+                "Creating migration_steps table - this is migration system infrastructure"
+            )
+            await conn.execute(
+                """
+                CREATE TABLE migration_steps (
+                    step INTEGER PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """
+            )
+            logger.info("✅ Created migration_steps table")
+        rows = await conn.fetch("SELECT * FROM migration_steps")
+        logger.info(
+            f"✅ migration_steps table exists. Migrations done: {', '.join(str(row['step']) for row in rows)}"
+        )
+
+    async def _record_migration_completion(
+        self, conn: asyncpg.Connection, step_data: Dict[str, Any]
+    ) -> None:
+        """
+        MIGRATE LOGIC STEP 8: Record migration completion in migration_steps table.
+        """
+        step_num = step_data["step"]
+        description = step_data["description"]
+
+        await conn.execute(
+            """
+            INSERT INTO migration_steps (step, description) 
+            VALUES ($1, $2)
+        """,
+            step_num,
+            description,
+        )
+
+        logger.info(f"✅ Recorded migration completion for step {step_num}")
+
+
+# MAIN MIGRATION FUNCTION
+async def migrate_database() -> None:
+    """
+    Main migration function that can be called from db.py without circular imports.
+    Uses the global database connection pool.
+    """
+    try:
+        # Import here to avoid circular imports
+        from system_praktiker.db import get_db
+
+        db = get_db()
+        if not db.pool:
+            logger.error("Database pool not initialized")
+            raise RuntimeError("Database not connected")
+
+        migrator = DatabaseMigrator(db.pool)
+        await migrator.migrate_database()
+
+    except Exception as e:
+        logger.error(f"Migration failed: {e}")
+        raise

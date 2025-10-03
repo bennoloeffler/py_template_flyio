@@ -6,6 +6,9 @@
 
 call 
 ``` bash
+# chrome dev tools
+claude mcp add chrome-devtools npx chrome-devtools-mcp@latest
+
 # add context7 mcp
 claude mcp add -s user context7 -- npx -y @upstash/context7-mcp
 
@@ -46,10 +49,10 @@ open http://localhost:8877/
 uv run pytest
 
 # commit, push, tag and deploy to TESTING website
-./deploy_test_fly.sh
+./fly_deploy_test.sh
 
 # commit, push, tag and deploy to PRODUCTION website
-./deploy_prod_fly.sh
+./fly_deploy_prod_fly.sh
 
 ```
 
