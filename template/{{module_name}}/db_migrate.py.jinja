@@ -64,9 +64,15 @@ SQL_LOG_PREVIEW_LENGTH = 100  # How many characters of SQL to show in logs
 ERROR_MESSAGE_MAX_LENGTH = 200  # Truncate long error messages
 LARGE_TABLE_THRESHOLD = 100000  # Warn when backing up tables with more rows
 
-# Generate admin password hash
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '{{ admin_password }}')
+# Generate admin password hash - use environment variable or default to admin123
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
 ADMIN_PASSWORD_HASH = pwd_context.hash(ADMIN_PASSWORD)
+
+# Log admin creation info (without showing password)
+if ADMIN_PASSWORD == 'admin123':
+    logger.warning("⚠️  Using default admin password 'admin123' - CHANGE THIS IN PRODUCTION!")
+else:
+    logger.info("✅ Using custom admin password from ADMIN_PASSWORD environment variable")
 
 # MIGRATION STEP DATA STRUCTURE
 # List of migration steps - this is the single source of truth for all migrations
@@ -130,17 +136,18 @@ migration_steps = [
             CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
             CREATE INDEX IF NOT EXISTS idx_files_uploaded_by ON files(uploaded_by);
             """,
-            # Note: Password is generated at template time or can be overridden via env
+            # Create default admin user if not exists
+            # Uses ADMIN_PASSWORD env var or defaults to 'admin123'
             f"""
             INSERT INTO users (email, password_hash, role, status, full_name)
             SELECT
-                'admin@{{ project_name }}.local',
+                'admin@{{ project_name }}.de',
                 '{ADMIN_PASSWORD_HASH}',
                 'admin',
                 'active',
                 'Administrator'
             WHERE NOT EXISTS (
-                SELECT 1 FROM users WHERE email = 'admin@{{ project_name }}.local'
+                SELECT 1 FROM users WHERE email = 'admin@{{ project_name }}.de'
             );
             """,
         ]

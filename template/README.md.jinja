@@ -4,13 +4,19 @@
 
 ## 🔐 Admin Credentials
 
-**IMPORTANT - Save these credentials securely!**
+Default admin user (created automatically on first startup):
 
-- **Admin Email**: `admin@{{ project_name }}.local`
-- **Admin Password**: `{{ admin_password }}`
+- **Admin Email**: `admin@{{ project_name }}.de`
+- **Admin Password**: `admin123` (or set via `ADMIN_PASSWORD` environment variable)
 
-The admin password was generated during project creation and won't be shown again.
-You can change it after first login or set a new one using the `ADMIN_PASSWORD` environment variable.
+**IMPORTANT**: Change the admin password immediately after first login!
+
+To use a custom admin password, set the `ADMIN_PASSWORD` environment variable:
+```bash
+export ADMIN_PASSWORD="your-secure-password"
+# or add to .env file:
+echo "ADMIN_PASSWORD=your-secure-password" >> .env
+```
 
 ## Installation
 
