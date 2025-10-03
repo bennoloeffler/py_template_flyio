@@ -2,10 +2,23 @@
 
 {{ description }}
 
+## 🔐 Admin Credentials
+
+**IMPORTANT - Save these credentials securely!**
+
+- **Admin Email**: `admin@{{ project_name }}.local`
+- **Admin Password**: `{{ admin_password }}`
+
+The admin password was generated during project creation and won't be shown again.
+You can change it after first login or set a new one using the `ADMIN_PASSWORD` environment variable.
+
 ## Installation
 
 call 
 ``` bash
+# statusline for claude code
+npx ccstatusline@latest
+
 # chrome dev tools
 claude mcp add chrome-devtools npx chrome-devtools-mcp@latest
 

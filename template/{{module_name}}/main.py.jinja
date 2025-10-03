@@ -1,176 +1,573 @@
-from contextlib import asynccontextmanager
-from datetime import datetime
-from typing import Any, AsyncGenerator, Dict
+"""
+Main FastAPI application for {{ project_name }}.
 
-from fastapi import FastAPI, Request
+This module provides:
+- User authentication with JWT tokens
+- File upload/download endpoints
+- Admin panel for user and file management
+- HTML pages for web interface
+"""
+
+import logging
+import os
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, AsyncGenerator, Dict, List, Optional
+
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from jose import JWTError, jwt
+from markdown_it import MarkdownIt
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
-from starlette.responses import Response
 
 from {{ module_name }}.config import settings
 from {{ module_name }}.db import get_db, setup_database
+from {{ module_name }}.models import (
+    ErrorResponse,
+    FileInfo,
+    FileListResponse,
+    FileUploadResponse,
+    LoginRequest,
+    MessageResponse,
+    Token,
+    TokenData,
+    UserCreate,
+    UserPublic,
+    UserRole,
+    UserUpdate,
+)
+from {{ module_name }}.upload_files import get_file_service
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Get directory where this file lives
+BASE_DIR = Path(__file__).parent
 
 # Initialize templates
-templates = Jinja2Templates(directory="{{ module_name }}/html_templates")
+templates = Jinja2Templates(directory=str(BASE_DIR / "html_templates"))
+
+# Initialize markdown renderer
+markdown = MarkdownIt()
+
+# Add markdown filter to templates
+templates.env.filters["markdown"] = lambda text: markdown.render(text) if text else ""
 
 # Initialize rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
+# JWT Configuration
+SECRET_KEY = settings.secret_key
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
+
+# OAuth2 scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/token")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Lifespan context manager for FastAPI startup and shutdown events."""
+    """Lifespan context manager for startup and shutdown."""
     # Startup
+    logger.info("Starting up {{ project_name }}...")
     await setup_database(settings.database_url)
+    logger.info("Database initialized")
+
     yield
+
     # Shutdown
+    logger.info("Shutting down {{ project_name }}...")
     try:
         db = get_db()
         await db.disconnect()
-    except Exception:
-        # Handle case where db might not be initialized
-        pass
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}")
 
 
-# Create FastAPI app with configuration from settings and lifespan
+# Create FastAPI app
 app = FastAPI(
-    title=settings.app_title,
+    title="{{ project_name }} API",
     version=settings.app_version,
-    description="...",
+    description="File sharing application with user authentication",
     debug=settings.debug,
     lifespan=lifespan,
 )
 
-# Add security headers and CORS middleware
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Add rate limiter middleware
+# Add rate limiter
 app.state.limiter = limiter
 
+# Mount static files
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+
+
+# ==================== Exception Handlers ====================
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
-    """Handle rate limit exceeded exceptions."""
-    return Response("Rate limit exceeded", status_code=429)
+    """Handle rate limit exceeded."""
+    return JSONResponse(
+        status_code=429,
+        content={"error": "Rate limit exceeded", "detail": str(exc)}
+    )
 
+
+# ==================== Authentication Utilities ====================
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Create JWT access token."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+    """Get current user from JWT token."""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        token_data = TokenData(email=email, role=payload.get("role"))
+    except JWTError:
+        raise credentials_exception
+
+    db = get_db()
+    user = await db.get_user_by_email(email=token_data.email)
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+async def get_current_active_user(current_user=Depends(get_current_user)) -> Dict[str, Any]:
+    """Ensure user is active."""
+    if current_user["status"] != "active":
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+async def require_admin(current_user=Depends(get_current_active_user)) -> Dict[str, Any]:
+    """Require admin role."""
+    if current_user["role"] != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
+    return current_user
+
+
+# ==================== Public Endpoints ====================
 
 @app.get("/")
-def root(request: Request) -> Any:
-    """Returns a styled HTML landing page."""
-    context = {
-        "title": settings.app_title,
-        "description": "...",
-        "environment": settings.environment,
-        "version": settings.app_version,
-        "features": [
-            {
-                "icon": "⚡",
-                "name": "FastAPI",
-                "description": "Modern, fast Python web framework",
-            },
-            {
-                "icon": "🔒",
-                "name": "Security",
-                "description": "Rate limiting, CORS, security headers",
-            },
-            {
-                "icon": "📊",
-                "name": "Monitoring",
-                "description": "Health checks and metrics",
-            },
-            {
-                "icon": "🚀",
-                "name": "Production Ready",
-                "description": "Docker and Fly.io deployment",
-            },
-        ],
-        "api_links": [
-            {"icon": "📚", "name": "API Docs", "url": "/docs"},
-            {"icon": "🏥", "name": "Health", "url": "/health"},
-            {"icon": "👋", "name": "Hello", "url": "/hello"},
-            {"icon": "🕐", "name": "Time", "url": "/time"},
-            {"icon": "🔢", "name": "Counter", "url": "/counter"},
-        ],
-    }
-    return templates.TemplateResponse("index.html", {"request": request, **context})
-
-
-@app.get("/hello")
-@limiter.limit("60/minute")
-def hello_world(request: Request) -> Dict[str, str]:
-    """Returns a hello world message."""
-    return {"message": "Hello from {{ project_name }}!"}
-
-
-@app.get("/time")
-@limiter.limit("30/minute")
-def get_time(request: Request) -> Dict[str, str]:
-    """Returns the current server time in ISO format."""
-    return {"time": datetime.now().isoformat()}
+async def root(request: Request):
+    """Landing page."""
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "title": "{{ project_name }}",
+            "description": "File sharing made simple"
+        }
+    )
 
 
 @app.get("/health")
-@limiter.limit("10/minute")
-def health_check(request: Request) -> Dict[str, Any]:
-    """Health check endpoint for monitoring."""
+@limiter.limit(settings.health_rate_limit)
+async def health_check(request: Request):
+    """Health check endpoint."""
     return {
         "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
         "version": settings.app_version,
-        "environment": settings.environment,
+        "environment": settings.environment
     }
 
 
-@app.get("/counter")
-async def counter_page(request: Request) -> Any:
-    """Counter UI page."""
-    return templates.TemplateResponse("counter.html", {"request": request})
+# ==================== Authentication Endpoints ====================
+
+@app.post("/api/token", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Login endpoint for OAuth2."""
+    db = get_db()
+    user = await db.authenticate_user(form_data.username, form_data.password)
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["email"], "role": user["role"]},
+        expires_delta=access_token_expires
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.get("/api/counter")
-async def get_counter(request: Request) -> Dict[str, Any]:
-    """Get current counter value."""
-    try:
-        count = await get_db().get_count()
-        return {"count": count}
-    except Exception as e:
-        return {"error": str(e), "count": 0}
+@app.post("/api/register", response_model=UserPublic)
+async def register(user: UserCreate):
+    """Register a new user."""
+    db = get_db()
+
+    # Check if user exists
+    existing_user = await db.get_user_by_email(user.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered"
+        )
+
+    # Create user (as regular user, not admin)
+    user_id = await db.create_user(
+        email=user.email,
+        password=user.password,
+        role="user",
+        status="active",
+        full_name=user.full_name,
+        company_name=user.company_name
+    )
+
+    # Get created user
+    new_user = await db.get_user_by_id(user_id)
+
+    return UserPublic(
+        id=new_user["id"],
+        email=new_user["email"],
+        role=new_user["role"],
+        status=new_user["status"],
+        full_name=new_user.get("full_name"),
+        company_name=new_user.get("company_name"),
+        created_at=str(new_user["created_at"])
+    )
 
 
-@app.post("/api/counter/increment")
-@limiter.limit("60/minute")
-async def increment_counter(request: Request) -> Dict[str, Any]:
-    """Increment counter and return new value."""
-    try:
-        new_count = await get_db().increment_count()
-        return {"count": new_count, "success": True}
-    except Exception as e:
-        return {"error": str(e), "success": False}
+@app.get("/api/me", response_model=UserPublic)
+async def get_me(current_user=Depends(get_current_active_user)):
+    """Get current user info."""
+    # Get file count for user
+    db = get_db()
+    file_count = await db.get_file_count(uploaded_by=current_user["id"])
+
+    return UserPublic(
+        id=current_user["id"],
+        email=current_user["email"],
+        role=current_user["role"],
+        status=current_user["status"],
+        full_name=current_user.get("full_name"),
+        company_name=current_user.get("company_name"),
+        created_at=str(current_user["created_at"]),
+        file_count=file_count
+    )
 
 
-def main() -> None:
-    """Main entry point for the FastAPI application."""
-    import uvicorn
+@app.put("/api/me", response_model=UserPublic)
+async def update_me(
+    update: UserUpdate,
+    current_user=Depends(get_current_active_user)
+):
+    """Update current user profile."""
+    db = get_db()
 
-    uvicorn.run(
-        "{{ module_name }}.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
-        workers=1 if settings.debug else settings.workers,
+    # Prepare update fields
+    update_data = update.dict(exclude_unset=True)
+
+    # Don't allow role/status changes through this endpoint
+    update_data.pop("role", None)
+    update_data.pop("status", None)
+
+    # Update user
+    success = await db.update_user(current_user["id"], **update_data)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to update user")
+
+    # Get updated user
+    updated_user = await db.get_user_by_id(current_user["id"])
+
+    return UserPublic(
+        id=updated_user["id"],
+        email=updated_user["email"],
+        role=updated_user["role"],
+        status=updated_user["status"],
+        full_name=updated_user.get("full_name"),
+        company_name=updated_user.get("company_name"),
+        created_at=str(updated_user["created_at"])
+    )
+
+
+# ==================== File Management Endpoints ====================
+
+@app.post("/api/files/upload", response_model=FileUploadResponse)
+async def upload_file(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_active_user)
+):
+    """Upload a file."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    file_service = get_file_service()
+    result = await file_service.upload_file(
+        file=file,
+        user_id=current_user["id"]
+    )
+
+    return result
+
+
+@app.get("/api/files", response_model=FileListResponse)
+async def list_files(
+    page: int = 1,
+    per_page: int = 50,
+    search: Optional[str] = None,
+    my_files_only: bool = False,
+    current_user=Depends(get_current_active_user)
+):
+    """List files with pagination."""
+    file_service = get_file_service()
+
+    # Calculate offset
+    offset = (page - 1) * per_page
+
+    # Get files
+    uploaded_by = current_user["id"] if my_files_only else None
+    files = await file_service.list_files(
+        limit=per_page,
+        offset=offset,
+        uploaded_by=uploaded_by,
+        search=search
+    )
+
+    # Get total count
+    total = await file_service.get_file_count(
+        uploaded_by=uploaded_by,
+        search=search
+    )
+
+    # Calculate pages
+    pages = (total + per_page - 1) // per_page
+
+    return FileListResponse(
+        files=files,
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages
+    )
+
+
+@app.get("/api/files/{filename}")
+async def download_file(
+    filename: str,
+    current_user=Depends(get_current_active_user)
+):
+    """Download a file (requires authentication)."""
+    file_service = get_file_service()
+    file_data = await file_service.get_file(filename)
+
+    if not file_data:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Create streaming response
+    import io
+    return StreamingResponse(
+        io.BytesIO(file_data["data"]),
+        media_type=file_data["content_type"],
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_data["original_filename"]}"'
+        }
+    )
+
+
+@app.delete("/api/files/{file_id}", response_model=MessageResponse)
+async def delete_file(
+    file_id: int,
+    current_user=Depends(get_current_active_user)
+):
+    """Delete a file."""
+    file_service = get_file_service()
+
+    # Delete file (checks permissions internally)
+    success = await file_service.delete_file(
+        file_id=file_id,
+        user_id=current_user["id"],
+        is_admin=(current_user["role"] == "admin")
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete file")
+
+    return MessageResponse(message="File deleted successfully")
+
+
+# ==================== Admin Endpoints ====================
+
+@app.get("/api/admin/users", response_model=List[UserPublic])
+async def list_users(
+    page: int = 1,
+    per_page: int = 50,
+    role: Optional[str] = None,
+    admin=Depends(require_admin)
+):
+    """List all users (admin only)."""
+    db = get_db()
+
+    offset = (page - 1) * per_page
+    users = await db.list_users(limit=per_page, offset=offset, role=role)
+
+    return [
+        UserPublic(
+            id=user["id"],
+            email=user["email"],
+            role=user["role"],
+            status=user["status"],
+            full_name=user.get("full_name"),
+            company_name=user.get("company_name"),
+            created_at=str(user["created_at"]),
+            file_count=user.get("file_count", 0)
+        )
+        for user in users
+    ]
+
+
+@app.delete("/api/admin/users/{user_id}", response_model=MessageResponse)
+async def delete_user(
+    user_id: int,
+    admin=Depends(require_admin)
+):
+    """Delete a user (admin only)."""
+    db = get_db()
+
+    # Don't allow deleting self
+    if user_id == admin["id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+
+    success = await db.delete_user(user_id)
+
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return MessageResponse(message="User deleted successfully")
+
+
+# ==================== HTML Page Routes ====================
+
+@app.get("/login")
+async def login_page(request: Request):
+    """Login page."""
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "title": "Login"}
+    )
+
+
+@app.get("/register")
+async def register_page(request: Request):
+    """Registration page."""
+    return templates.TemplateResponse(
+        "register.html",
+        {"request": request, "title": "Register"}
+    )
+
+
+@app.get("/files")
+async def files_page(request: Request):
+    """Files browser page."""
+    return templates.TemplateResponse(
+        "files.html",
+        {"request": request, "title": "Files"}
+    )
+
+
+@app.get("/upload")
+async def upload_page(request: Request):
+    """File upload page."""
+    return templates.TemplateResponse(
+        "upload.html",
+        {"request": request, "title": "Upload"}
+    )
+
+
+@app.get("/admin")
+async def admin_page(request: Request):
+    """Admin dashboard."""
+    return templates.TemplateResponse(
+        "admin.html",
+        {"request": request, "title": "Admin Dashboard"}
+    )
+
+
+# ==================== Error Pages ====================
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc):
+    """404 error page."""
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            status_code=404,
+            content={"error": "Not found"}
+        )
+    return templates.TemplateResponse(
+        "404.html",
+        {"request": request, "title": "Page Not Found"},
+        status_code=404
+    )
+
+
+@app.exception_handler(500)
+async def server_error_handler(request: Request, exc):
+    """500 error page."""
+    if request.url.path.startswith("/api/"):
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal server error"}
+        )
+    return templates.TemplateResponse(
+        "500.html",
+        {"request": request, "title": "Server Error"},
+        status_code=500
     )
 
 
 if __name__ == "__main__":
-    main()
-
-
+    import uvicorn
+    uvicorn.run(app, host=settings.host, port=settings.port)

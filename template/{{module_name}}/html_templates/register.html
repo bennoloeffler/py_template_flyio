@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Register - {{ project_name }}{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <h2>Register</h2>
+    <form id="registerForm" class="auth-form">
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required autofocus>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required minlength="8">
+        </div>
+
+        <div class="form-group">
+            <label for="full_name">Full Name (Optional)</label>
+            <input type="text" id="full_name" name="full_name">
+        </div>
+
+        <div class="form-group">
+            <label for="company_name">Company (Optional)</label>
+            <input type="text" id="company_name" name="company_name">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Register</button>
+
+        <p class="auth-link">
+            Already have an account? <a href="/login">Login here</a>
+        </p>
+    </form>
+
+    <div id="error-message" class="error-message" style="display:none;"></div>
+    <div id="success-message" class="success-message" style="display:none;"></div>
+</div>
+
+<style>
+    .auth-container {
+        max-width: 400px;
+        margin: 2rem auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .auth-form {
+        margin-top: 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 1rem;
+    }
+
+    .form-group input:focus {
+        outline: none;
+        border-color: #4CAF50;
+    }
+
+    .auth-link {
+        text-align: center;
+        margin-top: 1rem;
+    }
+
+    .error-message {
+        color: #dc3545;
+        padding: 0.75rem;
+        background: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-radius: 4px;
+        margin-top: 1rem;
+    }
+
+    .success-message {
+        color: #155724;
+        padding: 0.75rem;
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        border-radius: 4px;
+        margin-top: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const userData = {
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value,
+        full_name: document.getElementById('full_name').value || null,
+        company_name: document.getElementById('company_name').value || null
+    };
+
+    try {
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(userData)
+        });
+
+        if (response.ok) {
+            document.getElementById('success-message').style.display = 'block';
+            document.getElementById('success-message').textContent = 'Registration successful! Redirecting to login...';
+            document.getElementById('error-message').style.display = 'none';
+
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+        } else {
+            const error = await response.json();
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-message').textContent = error.detail || 'Registration failed';
+            document.getElementById('success-message').style.display = 'none';
+        }
+    } catch (error) {
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-message').textContent = 'Connection error. Please try again.';
+        document.getElementById('success-message').style.display = 'none';
+    }
+});
+</script>
+{% endblock %}

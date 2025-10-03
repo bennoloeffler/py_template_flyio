@@ -42,9 +42,14 @@ JSM MIGRATION STEP FORMAT:
 """
 
 import logging
+import os
 from typing import Any, Dict
 
 import asyncpg
+from passlib.context import CryptContext
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Configure comprehensive logging
 logging.basicConfig(level=logging.INFO)
@@ -70,6 +75,73 @@ LARGE_TABLE_THRESHOLD = 100000  # Warn when backing up tables with more rows
 
 
 migration_steps = [
+    {
+        "step": 0,
+        "data_tables_to_backup": [],
+        "description": "Initial database setup with users and files tables",
+        "sql_alter_tables_and_copy_data": [
+            # Create migration tracking table
+            """
+            CREATE TABLE IF NOT EXISTS migration_steps (
+                step INTEGER PRIMARY KEY,
+                description TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Create users table
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                role VARCHAR(50) NOT NULL DEFAULT 'user',
+                status VARCHAR(50) NOT NULL DEFAULT 'active',
+                full_name VARCHAR(200),
+                company_name VARCHAR(200),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """,
+            # Create index on email for faster lookups
+            """
+            CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+            """,
+            # Create files table with BYTEA storage
+            """
+            CREATE TABLE IF NOT EXISTS files (
+                id SERIAL PRIMARY KEY,
+                filename VARCHAR(255) UNIQUE NOT NULL,
+                original_filename VARCHAR(255) NOT NULL,
+                content_type VARCHAR(100) NOT NULL,
+                file_size BIGINT NOT NULL,
+                data BYTEA NOT NULL,
+                uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active BOOLEAN DEFAULT TRUE
+            );
+            """,
+            # Create indexes for files table
+            """
+            CREATE INDEX IF NOT EXISTS idx_files_filename ON files(filename);
+            CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
+            CREATE INDEX IF NOT EXISTS idx_files_uploaded_by ON files(uploaded_by);
+            """,
+            # Note: This dynamically generates the hash at runtime from environment
+            # variable or uses the generated password from Copier template
+            f"""
+            INSERT INTO users (email, password_hash, role, status, full_name)
+            SELECT
+                'admin@{{ project_name }}.local',
+                '{pwd_context.hash(os.getenv('ADMIN_PASSWORD', '{{ admin_password }}'))}',
+                'admin',
+                'active',
+                'Administrator'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM users WHERE email = 'admin@{{ project_name }}.local'
+            );
+            """,
+        ]
+    }
 ]
 
 
@@ -537,7 +609,7 @@ async def migrate_database() -> None:
     """
     try:
         # Import here to avoid circular imports
-        from system_praktiker.db import get_db
+        from {{ module_name }}.db import get_db
 
         db = get_db()
         if not db.pool:

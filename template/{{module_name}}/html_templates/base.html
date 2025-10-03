@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ title | default('{{ project_name }}') }}{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">{{ project_name }}</a>
+            <div class="nav-menu" id="navMenu">
+                <a href="/files" class="nav-link">Files</a>
+                <a href="/upload" class="nav-link">Upload</a>
+                <div class="nav-auth" id="navAuth">
+                    <a href="/login" class="nav-link" id="loginLink">Login</a>
+                    <a href="/register" class="nav-link" id="registerLink">Register</a>
+                    <span class="nav-user" id="navUser" style="display:none;">
+                        <span id="userEmail"></span>
+                        <a href="#" onclick="logout(); return false;" class="nav-link">Logout</a>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 {{ project_name }}. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Check authentication status
+        const token = localStorage.getItem('token');
+        if (token) {
+            // User is logged in
+            document.getElementById('loginLink').style.display = 'none';
+            document.getElementById('registerLink').style.display = 'none';
+            document.getElementById('navUser').style.display = 'inline';
+
+            // Fetch user info
+            fetch('/api/me', {
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.email) {
+                    document.getElementById('userEmail').textContent = data.email;
+
+                    // Show admin link if user is admin
+                    if (data.role === 'admin') {
+                        const adminLink = document.createElement('a');
+                        adminLink.href = '/admin';
+                        adminLink.className = 'nav-link';
+                        adminLink.textContent = 'Admin';
+                        document.querySelector('.nav-menu').insertBefore(adminLink, document.getElementById('navAuth'));
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching user info:', error);
+                localStorage.removeItem('token');
+                window.location.reload();
+            });
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/';
+        }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

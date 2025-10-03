@@ -1,0 +1,313 @@
+"""
+File upload and management service for {{ project_name }}.
+
+This module handles:
+- File uploads with unique filename generation
+- File storage in PostgreSQL BYTEA columns
+- Thumbnail generation for images
+- File download with proper MIME types
+- File metadata management
+"""
+
+import io
+import logging
+from typing import Any, Dict, List, Optional
+
+from fastapi import HTTPException, UploadFile
+from PIL import Image
+
+from {{ module_name }}.db import get_db
+from {{ module_name }}.models import FileInfo, FileUploadResponse
+
+logger = logging.getLogger(__name__)
+
+# Configuration constants
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB limit
+THUMBNAIL_MAX_SIZE = 500  # 500px max width/height for thumbnails
+
+# Allowed content types
+ALLOWED_CONTENT_TYPES = {
+    # Images
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+    # Documents
+    "application/pdf",
+    "text/plain",
+    "text/csv",
+    "text/markdown",
+    "text/html",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    # Archives
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/x-tar",
+    "application/gzip",
+    # Code
+    "text/javascript",
+    "application/json",
+    "text/css",
+    "text/xml",
+    "application/xml",
+}
+
+
+def is_image(content_type: str) -> bool:
+    """Check if the content type represents an image."""
+    return content_type.startswith("image/") and content_type != "image/svg+xml"
+
+
+def generate_thumbnail(image_data: bytes, max_size: int = THUMBNAIL_MAX_SIZE) -> Optional[bytes]:
+    """
+    Generate a thumbnail from image data.
+
+    Args:
+        image_data: Original image bytes
+        max_size: Maximum width/height for thumbnail
+
+    Returns:
+        Thumbnail image bytes as JPEG, or None if generation fails
+    """
+    try:
+        # Open image from bytes
+        img = Image.open(io.BytesIO(image_data))
+
+        # Convert RGBA to RGB if necessary (for JPEG output)
+        if img.mode in ('RGBA', 'LA', 'P'):
+            # Create a white background
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            if img.mode == 'P':
+                img = img.convert('RGBA')
+            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            img = background
+
+        # Calculate thumbnail size maintaining aspect ratio
+        img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+
+        # Save to bytes
+        output = io.BytesIO()
+        img.save(output, format='JPEG', quality=85, optimize=True)
+        output.seek(0)
+
+        return output.read()
+    except Exception as e:
+        logger.error(f"Error generating thumbnail: {e}")
+        return None
+
+
+class FileService:
+    """Service for handling file operations."""
+
+    def __init__(self):
+        """Initialize file service."""
+        self.db = get_db()
+
+    async def validate_file(self, file: UploadFile) -> None:
+        """
+        Validate uploaded file.
+
+        Args:
+            file: Uploaded file to validate
+
+        Raises:
+            HTTPException: If validation fails
+        """
+        # Check content type
+        if file.content_type not in ALLOWED_CONTENT_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File type {file.content_type} not allowed"
+            )
+
+        # Check file size
+        # Read file to check size (will read again later)
+        contents = await file.read()
+        await file.seek(0)  # Reset for later reading
+
+        if len(contents) > MAX_FILE_SIZE:
+            size_mb = len(contents) / (1024 * 1024)
+            raise HTTPException(
+                status_code=400,
+                detail=f"File size {size_mb:.1f}MB exceeds maximum of {MAX_FILE_SIZE / (1024 * 1024)}MB"
+            )
+
+    async def upload_file(
+        self,
+        file: UploadFile,
+        user_id: Optional[int] = None
+    ) -> FileUploadResponse:
+        """
+        Upload a file to the database.
+
+        Args:
+            file: File to upload
+            user_id: ID of uploading user (optional)
+
+        Returns:
+            FileUploadResponse with file details
+        """
+        # Validate file
+        await self.validate_file(file)
+
+        # Read file contents
+        file_data = await file.read()
+
+        # Generate unique filename
+        original_filename = file.filename or "unnamed"
+        unique_filename = await self.db.get_unique_filename(original_filename)
+
+        # Create file record
+        file_id = await self.db.create_file_record(
+            filename=unique_filename,
+            original_filename=original_filename,
+            content_type=file.content_type or "application/octet-stream",
+            file_size=len(file_data),
+            file_data=file_data,
+            uploaded_by=user_id
+        )
+
+        # Generate thumbnail if image
+        thumbnail_url = None
+        if is_image(file.content_type or ""):
+            thumbnail_data = generate_thumbnail(file_data)
+            if thumbnail_data:
+                # Store thumbnail as separate file
+                thumb_filename = f"thumb_{unique_filename}"
+                await self.db.create_file_record(
+                    filename=thumb_filename,
+                    original_filename=f"thumb_{original_filename}",
+                    content_type="image/jpeg",
+                    file_size=len(thumbnail_data),
+                    file_data=thumbnail_data,
+                    uploaded_by=user_id
+                )
+                thumbnail_url = f"/api/files/{thumb_filename}"
+
+        logger.info(f"File uploaded: {unique_filename} (ID: {file_id})")
+
+        return FileUploadResponse(
+            success=True,
+            file_id=file_id,
+            filename=unique_filename,
+            download_url=f"/api/files/{unique_filename}",
+            file_size=len(file_data),
+            message=f"File uploaded successfully as {unique_filename}",
+            thumbnail_url=thumbnail_url
+        )
+
+    async def get_file(self, filename: str) -> Optional[Dict[str, Any]]:
+        """
+        Get file data and metadata by filename.
+
+        Args:
+            filename: Filename to retrieve
+
+        Returns:
+            Dictionary with file data and metadata, or None if not found
+        """
+        return await self.db.get_file_by_filename(filename)
+
+    async def list_files(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        uploaded_by: Optional[int] = None,
+        search: Optional[str] = None
+    ) -> List[FileInfo]:
+        """
+        List files with pagination and filters.
+
+        Args:
+            limit: Maximum number of files to return
+            offset: Number of files to skip
+            uploaded_by: Filter by uploader user ID
+            search: Search term for filename or uploader
+
+        Returns:
+            List of FileInfo objects
+        """
+        files = await self.db.list_files(
+            limit=limit,
+            offset=offset,
+            uploaded_by=uploaded_by,
+            search=search
+        )
+
+        # Convert to FileInfo models
+        result = []
+        for file in files:
+            result.append(FileInfo(
+                id=file["id"],
+                filename=file["filename"],
+                original_filename=file["original_filename"],
+                content_type=file["content_type"],
+                file_size=file["file_size"],
+                uploaded_by=file.get("uploaded_by"),
+                uploaded_by_email=file.get("uploader_email"),
+                created_at=str(file["created_at"]),
+                download_url=f"/api/files/{file['filename']}",
+                thumbnail_url=f"/api/files/thumb_{file['filename']}" if is_image(file["content_type"]) else None
+            ))
+
+        return result
+
+    async def delete_file(self, file_id: int, user_id: Optional[int] = None, is_admin: bool = False) -> bool:
+        """
+        Delete a file (soft delete).
+
+        Args:
+            file_id: ID of file to delete
+            user_id: ID of requesting user
+            is_admin: Whether user is admin
+
+        Returns:
+            True if deleted successfully
+
+        Raises:
+            HTTPException: If user doesn't have permission
+        """
+        # Get file info
+        file_data = await self.db.get_file_by_id(file_id)
+        if not file_data:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Check permissions
+        if not is_admin and file_data.get("uploaded_by") != user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to delete this file"
+            )
+
+        # Delete file
+        success = await self.db.delete_file(file_id)
+
+        if success:
+            logger.info(f"File deleted: {file_data['filename']} (ID: {file_id})")
+
+        return success
+
+    async def get_file_count(
+        self,
+        uploaded_by: Optional[int] = None,
+        search: Optional[str] = None
+    ) -> int:
+        """Get total count of files matching filters."""
+        return await self.db.get_file_count(uploaded_by=uploaded_by, search=search)
+
+
+# Global file service instance
+_file_service: Optional[FileService] = None
+
+
+def get_file_service() -> FileService:
+    """Get the global file service instance."""
+    global _file_service
+    if _file_service is None:
+        _file_service = FileService()
+    return _file_service

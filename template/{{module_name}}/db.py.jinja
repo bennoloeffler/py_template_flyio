@@ -1,17 +1,30 @@
 """
-Database connection and counter management for PostgreSQL.
+Database connection and user/file management for PostgreSQL.
+
+This module provides the database layer for {{ project_name }}, handling:
+- User authentication and management
+- File metadata storage and retrieval
+- Database migrations
+- Connection pooling with asyncpg
 """
 
-import os
-from logging import warning
-from typing import Optional
+import logging
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import asyncpg  # type: ignore
 from asyncpg import Pool  # type: ignore
+from passlib.context import CryptContext
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+# Password hashing context
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class Database:
-    """PostgreSQL database connection manager."""
+    """PostgreSQL database connection and operations manager."""
 
     def __init__(self, database_url: str):
         self.database_url = database_url
@@ -19,77 +32,424 @@ class Database:
 
     async def connect(self) -> None:
         """Create connection pool to PostgreSQL."""
-        self.pool = await asyncpg.create_pool(self.database_url)
+        self.pool = await asyncpg.create_pool(
+            self.database_url,
+            min_size=5,
+            max_size=20,
+            command_timeout=60
+        )
+        logger.info("Database connection pool created")
 
     async def disconnect(self) -> None:
         """Close connection pool."""
         if self.pool:
             await self.pool.close()
+            logger.info("Database connection pool closed")
 
     async def init_db(self) -> None:
-        """Initialize database with counter table on startup if missing."""
+        """Initialize database - runs migrations on startup."""
         if not self.pool:
             raise RuntimeError("Database not connected")
 
-        async with self.pool.acquire() as conn:
-            # Drop all existing tables for clean state (used in tests)
-            if os.getenv("DROP_TABLES_BEFORE_INIT", "false").lower() == "true":
-                warning("Dropping existing tables...")
-                await conn.execute("DROP TABLE IF EXISTS counter CASCADE")
-                await conn.execute("DROP TABLE IF EXISTS schema_migrations CASCADE")
+        # Import and run migrations
+        from {{ module_name }}.db_migrate import migrate_database
+        await migrate_database()
+        logger.info("Database initialized with migrations")
 
-            # Create counter table if it doesn't exist
-            await conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS counter (
-                    id SERIAL PRIMARY KEY,
-                    count INTEGER NOT NULL DEFAULT 0,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    # ==================== Password Management ====================
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """Verify a password against its hash."""
+        return pwd_context.verify(plain_password, hashed_password)
+
+    def get_password_hash(self, password: str) -> str:
+        """Hash a password for storing."""
+        return pwd_context.hash(password)
+
+    # ==================== User Management ====================
+
+    async def create_user(
+        self,
+        email: str,
+        password: str,
+        role: str = "user",
+        status: str = "active",
+        full_name: Optional[str] = None,
+        company_name: Optional[str] = None,
+    ) -> int:
+        """Create a new user and return their ID."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        password_hash = self.get_password_hash(password)
+
+        async with self.pool.acquire() as conn:
+            try:
+                user_id = await conn.fetchval(
+                    """
+                    INSERT INTO users (
+                        email, password_hash, role, status,
+                        full_name, company_name, created_at, updated_at
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                    RETURNING id
+                    """,
+                    email, password_hash, role, status, full_name, company_name
                 )
-            """
-            )
+                logger.info(f"Created user: {email} (ID: {user_id})")
+                return user_id
+            except asyncpg.UniqueViolationError:
+                raise ValueError(f"User with email {email} already exists")
 
-            # Ensure we have exactly one counter row (id=1)
-            existing = await conn.fetchval("SELECT COUNT(*) FROM counter WHERE id = 1")
-            if existing == 0:
-                await conn.execute("INSERT INTO counter (id, count) VALUES (1, 0)")
-
-            # Verify the counter exists and is initialized
-            await conn.fetchval("SELECT count FROM counter WHERE id = 1")
-
-    async def reset_tables(self) -> None:
-        """Reset all tables - used for testing."""
+    async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Get user by email address."""
         if not self.pool:
             raise RuntimeError("Database not connected")
 
         async with self.pool.acquire() as conn:
-            await conn.execute("DROP TABLE IF EXISTS counter CASCADE")
-            await conn.execute("DROP TABLE IF EXISTS schema_migrations CASCADE")
-
-    async def get_count(self) -> int:
-        """Get current counter value."""
-        if not self.pool:
-            raise RuntimeError("Database not connected")
-
-        async with self.pool.acquire() as conn:
-            result = await conn.fetchval("SELECT count FROM counter WHERE id = 1")
-            return result or 0
-
-    async def increment_count(self) -> int:
-        """Increment counter and return new value."""
-        if not self.pool:
-            raise RuntimeError("Database not connected")
-
-        async with self.pool.acquire() as conn:
-            result = await conn.fetchval(
+            row = await conn.fetchrow(
                 """
-                UPDATE counter 
-                SET count = count + 1, updated_at = CURRENT_TIMESTAMP
-                WHERE id = 1
-                RETURNING count
-            """
+                SELECT id, email, password_hash, role, status,
+                       full_name, company_name, created_at, updated_at
+                FROM users
+                WHERE email = $1
+                """,
+                email
             )
-            return result or 0
+            return dict(row) if row else None
+
+    async def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get user by ID."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, email, password_hash, role, status,
+                       full_name, company_name, created_at, updated_at
+                FROM users
+                WHERE id = $1
+                """,
+                user_id
+            )
+            return dict(row) if row else None
+
+    async def authenticate_user(self, email: str, password: str) -> Optional[Dict[str, Any]]:
+        """Authenticate user with email and password."""
+        user = await self.get_user_by_email(email)
+        if not user:
+            return None
+
+        if not self.verify_password(password, user["password_hash"]):
+            return None
+
+        if user["status"] != "active":
+            return None
+
+        return user
+
+    async def update_user(self, user_id: int, **fields) -> bool:
+        """Update user fields."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        # Handle password hashing if password is being updated
+        if "password" in fields:
+            fields["password_hash"] = self.get_password_hash(fields.pop("password"))
+
+        # Build dynamic UPDATE query
+        allowed_fields = {
+            "email", "password_hash", "role", "status",
+            "full_name", "company_name"
+        }
+
+        updates = []
+        values = []
+        idx = 1
+
+        for field, value in fields.items():
+            if field in allowed_fields:
+                updates.append(f"{field} = ${idx}")
+                values.append(value)
+                idx += 1
+
+        if not updates:
+            return False
+
+        updates.append(f"updated_at = ${idx}")
+        values.append(datetime.now())
+        values.append(user_id)
+
+        query = f"""
+            UPDATE users
+            SET {', '.join(updates)}
+            WHERE id = ${idx + 1}
+        """
+
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(query, *values)
+            return result == "UPDATE 1"
+
+    async def delete_user(self, user_id: int) -> bool:
+        """Delete a user and their associated data."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # Delete user's files first (foreign key constraint)
+                await conn.execute(
+                    "UPDATE files SET uploaded_by = NULL WHERE uploaded_by = $1",
+                    user_id
+                )
+
+                # Delete the user
+                result = await conn.execute(
+                    "DELETE FROM users WHERE id = $1",
+                    user_id
+                )
+                return result == "DELETE 1"
+
+    async def list_users(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        role: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List users with pagination."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        query = """
+            SELECT id, email, role, status, full_name, company_name,
+                   created_at, updated_at,
+                   (SELECT COUNT(*) FROM files WHERE uploaded_by = users.id) as file_count
+            FROM users
+        """
+
+        params = []
+        where_clauses = []
+        param_idx = 1
+
+        if role:
+            where_clauses.append(f"role = ${param_idx}")
+            params.append(role)
+            param_idx += 1
+
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+
+        query += f" ORDER BY created_at DESC LIMIT ${param_idx} OFFSET ${param_idx + 1}"
+        params.extend([limit, offset])
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_user_count(self, role: Optional[str] = None) -> int:
+        """Get total count of users."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        query = "SELECT COUNT(*) FROM users"
+        params = []
+
+        if role:
+            query += " WHERE role = $1"
+            params.append(role)
+
+        async with self.pool.acquire() as conn:
+            count = await conn.fetchval(query, *params) if params else await conn.fetchval(query)
+            return count or 0
+
+    # ==================== File Management ====================
+
+    async def create_file_record(
+        self,
+        filename: str,
+        original_filename: str,
+        content_type: str,
+        file_size: int,
+        file_data: bytes,
+        uploaded_by: Optional[int] = None
+    ) -> int:
+        """Create a file record and store file data."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            file_id = await conn.fetchval(
+                """
+                INSERT INTO files (
+                    filename, original_filename, content_type,
+                    file_size, data, uploaded_by, created_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                RETURNING id
+                """,
+                filename, original_filename, content_type,
+                file_size, file_data, uploaded_by
+            )
+            logger.info(f"Created file record: {filename} (ID: {file_id})")
+            return file_id
+
+    async def get_file_by_id(self, file_id: int) -> Optional[Dict[str, Any]]:
+        """Get file metadata and data by ID."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT f.*, u.email as uploader_email
+                FROM files f
+                LEFT JOIN users u ON f.uploaded_by = u.id
+                WHERE f.id = $1 AND f.is_active = TRUE
+                """,
+                file_id
+            )
+            return dict(row) if row else None
+
+    async def get_file_by_filename(self, filename: str) -> Optional[Dict[str, Any]]:
+        """Get file metadata and data by filename."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT f.*, u.email as uploader_email
+                FROM files f
+                LEFT JOIN users u ON f.uploaded_by = u.id
+                WHERE f.filename = $1 AND f.is_active = TRUE
+                """,
+                filename
+            )
+            return dict(row) if row else None
+
+    async def list_files(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        uploaded_by: Optional[int] = None,
+        search: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """List files with pagination and optional filters."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        query = """
+            SELECT f.id, f.filename, f.original_filename, f.content_type,
+                   f.file_size, f.uploaded_by, f.created_at,
+                   u.email as uploader_email, u.full_name as uploader_name
+            FROM files f
+            LEFT JOIN users u ON f.uploaded_by = u.id
+            WHERE f.is_active = TRUE
+        """
+
+        params = []
+        param_idx = 1
+
+        if uploaded_by:
+            query += f" AND f.uploaded_by = ${param_idx}"
+            params.append(uploaded_by)
+            param_idx += 1
+
+        if search:
+            query += f" AND (f.original_filename ILIKE ${param_idx} OR u.email ILIKE ${param_idx})"
+            params.append(f"%{search}%")
+            param_idx += 1
+
+        query += f" ORDER BY f.created_at DESC LIMIT ${param_idx} OFFSET ${param_idx + 1}"
+        params.extend([limit, offset])
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *params)
+            return [dict(row) for row in rows]
+
+    async def get_file_count(
+        self,
+        uploaded_by: Optional[int] = None,
+        search: Optional[str] = None
+    ) -> int:
+        """Get total count of files."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        query = """
+            SELECT COUNT(*)
+            FROM files f
+            LEFT JOIN users u ON f.uploaded_by = u.id
+            WHERE f.is_active = TRUE
+        """
+
+        params = []
+        param_idx = 1
+
+        if uploaded_by:
+            query += f" AND f.uploaded_by = ${param_idx}"
+            params.append(uploaded_by)
+            param_idx += 1
+
+        if search:
+            query += f" AND (f.original_filename ILIKE ${param_idx} OR u.email ILIKE ${param_idx})"
+            params.append(f"%{search}%")
+            param_idx += 1
+
+        async with self.pool.acquire() as conn:
+            count = await conn.fetchval(query, *params)
+            return count or 0
+
+    async def delete_file(self, file_id: int) -> bool:
+        """Soft delete a file (mark as inactive)."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                "UPDATE files SET is_active = FALSE WHERE id = $1",
+                file_id
+            )
+            return result == "UPDATE 1"
+
+    async def get_unique_filename(self, base_filename: str) -> str:
+        """Generate a unique filename by adding suffix if needed."""
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+
+        async with self.pool.acquire() as conn:
+            # Check if filename exists
+            exists = await conn.fetchval(
+                "SELECT COUNT(*) FROM files WHERE filename = $1",
+                base_filename
+            )
+
+            if not exists:
+                return base_filename
+
+            # Generate unique filename with suffix
+            name_parts = base_filename.rsplit('.', 1)
+            base_name = name_parts[0]
+            extension = name_parts[1] if len(name_parts) > 1 else ""
+
+            counter = 1
+            while True:
+                new_filename = f"{base_name}_{counter:03d}"
+                if extension:
+                    new_filename = f"{new_filename}.{extension}"
+
+                exists = await conn.fetchval(
+                    "SELECT COUNT(*) FROM files WHERE filename = $1",
+                    new_filename
+                )
+
+                if not exists:
+                    return new_filename
+
+                counter += 1
+                if counter > 999:
+                    raise ValueError("Cannot generate unique filename")
 
 
 # Global database instance
