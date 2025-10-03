@@ -53,7 +53,7 @@ admin_password:
   type: str
   help: Initial admin password (WRITE THIS DOWN - shown only once!)
   secret: false  # Show the password so user can save it
-  default: "{% raw %}{{ 999999999999 | random | hash('sha256') | truncate(12, True, '') }}{% endraw %}"
+  default: "{{ 999999999999 | random | hash('sha256') | truncate(12, True, '') }}"
 
 
 dependencies:
