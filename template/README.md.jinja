@@ -57,8 +57,10 @@ claude mcp add --scope user puppeteer npx @agent-infra/mcp-server-browser@latest
 # to use moonshot.ch as model for claude
 source set_kimi_as_antrophic.sh
 claude
+# run app for usage WITH CLAUDE CODE:
+uv run uvicorn {{ module_name }}.main:app --reload --port 8877 2>&1 | tee server.log
 
-# run app (on any other free port will work also)
+# run app WITHOUT CLAUDE CODE (on any other free port will work also)
 uv run uvicorn {{ module_name }}.main:app --reload --port 8877
 
 # open in browser

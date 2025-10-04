@@ -4,23 +4,50 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ title | default('{{ project_name }}') }}{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/static/style.css">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-container">
-            <a href="/" class="nav-brand">{{ project_name }}</a>
-            <div class="nav-menu" id="navMenu">
-                <a href="/files" class="nav-link">Files</a>
-                <a href="/upload" class="nav-link">Upload</a>
-                <div class="nav-auth" id="navAuth">
-                    <a href="/login" class="nav-link" id="loginLink">Login</a>
-                    <a href="/register" class="nav-link" id="registerLink">Register</a>
-                    <span class="nav-user" id="navUser" style="display:none;">
-                        <span id="userEmail"></span>
-                        <a href="#" onclick="logout(); return false;" class="nav-link">Logout</a>
+            <div class="nav-brand-section">
+                <a href="/" class="nav-brand-link">
+                    <img src="/static/home-icon.svg" alt="Home" class="nav-home-icon">
+                    <span class="nav-brand-text">{{ project_name }}</span>
+                </a>
+            </div>
+            <div class="nav-menu hidden md:flex gap-6 items-center" id="navMenu">
+                <a href="/files" class="nav-link text-gray-600 hover:text-green-500 transition-colors duration-200">Files</a>
+                <a href="/upload" class="nav-link text-gray-600 hover:text-green-500 transition-colors duration-200">Upload</a>
+                <div class="nav-auth flex gap-4 items-center" id="navAuth">
+                    <a href="/login" class="nav-link text-gray-600 hover:text-green-500 transition-colors duration-200" id="loginLink">Login</a>
+                    <a href="/register" class="nav-link text-gray-600 hover:text-green-500 transition-colors duration-200" id="registerLink">Register</a>
+                    <span class="nav-user hidden items-center gap-3" id="navUser">
+                        <span id="userEmail" class="text-gray-700 font-medium"></span>
+                        <a href="#" onclick="logout(); return false;" class="nav-link text-gray-600 hover:text-red-500 transition-colors duration-200">Logout</a>
                     </span>
+                </div>
+            </div>
+            <!-- Mobile menu button -->
+            <button class="md:hidden flex flex-col justify-center items-center w-6 h-6 space-y-1" id="mobileMenuButton">
+                <span class="block w-6 h-0.5 bg-gray-600"></span>
+                <span class="block w-6 h-0.5 bg-gray-600"></span>
+                <span class="block w-6 h-0.5 bg-gray-600"></span>
+            </button>
+        </div>
+        <!-- Mobile menu -->
+        <div class="md:hidden hidden bg-white border-t border-gray-200" id="mobileMenu">
+            <div class="px-4 py-4 space-y-4">
+                <a href="/files" class="block text-gray-600 hover:text-green-500 transition-colors duration-200">Files</a>
+                <a href="/upload" class="block text-gray-600 hover:text-green-500 transition-colors duration-200">Upload</a>
+                <div class="nav-auth space-y-4" id="mobileNavAuth">
+                    <a href="/login" class="block text-gray-600 hover:text-green-500 transition-colors duration-200" id="mobileLoginLink">Login</a>
+                    <a href="/register" class="block text-gray-600 hover:text-green-500 transition-colors duration-200" id="mobileRegisterLink">Register</a>
+                    <div class="nav-user hidden space-y-2" id="mobileNavUser">
+                        <span id="mobileUserEmail" class="block text-gray-700 font-medium"></span>
+                        <a href="#" onclick="logout(); return false;" class="block text-gray-600 hover:text-red-500 transition-colors duration-200">Logout</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -35,13 +62,26 @@
     </footer>
 
     <script>
+        // Mobile menu toggle
+        const mobileMenuButton = document.getElementById('mobileMenuButton');
+        const mobileMenu = document.getElementById('mobileMenu');
+
+        mobileMenuButton.addEventListener('click', () => {
+            mobileMenu.classList.toggle('hidden');
+        });
+
         // Check authentication status
         const token = localStorage.getItem('token');
         if (token) {
-            // User is logged in
+            // User is logged in - hide login/register, show user info
             document.getElementById('loginLink').style.display = 'none';
             document.getElementById('registerLink').style.display = 'none';
-            document.getElementById('navUser').style.display = 'inline';
+            document.getElementById('navUser').classList.remove('hidden');
+
+            // Mobile menu
+            document.getElementById('mobileLoginLink').style.display = 'none';
+            document.getElementById('mobileRegisterLink').style.display = 'none';
+            document.getElementById('mobileNavUser').classList.remove('hidden');
 
             // Fetch user info
             fetch('/api/me', {
@@ -53,14 +93,22 @@
             .then(data => {
                 if (data.email) {
                     document.getElementById('userEmail').textContent = data.email;
+                    document.getElementById('mobileUserEmail').textContent = data.email;
 
                     // Show admin link if user is admin
                     if (data.role === 'admin') {
                         const adminLink = document.createElement('a');
                         adminLink.href = '/admin';
-                        adminLink.className = 'nav-link';
+                        adminLink.className = 'nav-link text-gray-600 hover:text-green-500 transition-colors duration-200';
                         adminLink.textContent = 'Admin';
                         document.querySelector('.nav-menu').insertBefore(adminLink, document.getElementById('navAuth'));
+
+                        // Mobile admin link
+                        const mobileAdminLink = document.createElement('a');
+                        mobileAdminLink.href = '/admin';
+                        mobileAdminLink.className = 'block text-gray-600 hover:text-green-500 transition-colors duration-200';
+                        mobileAdminLink.textContent = 'Admin';
+                        document.getElementById('mobileMenu').querySelector('.space-y-4').insertBefore(mobileAdminLink, document.getElementById('mobileNavAuth'));
                     }
                 }
             })

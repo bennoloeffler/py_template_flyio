@@ -13,6 +13,10 @@ This is a **Copier template repository** for generating Python FastAPI applicati
 - `template/CLAUDE.md.jinja` becomes the `CLAUDE.md` for generated projects
 
 ## Template Architecture
+when in doubt: read the docs:
+- with mcp context7: copier 
+- or https://copier.readthedocs.io/en/stable/
+
 
 ### Copier Concepts Used
 - **`copier.yml`**: Defines questions asked during generation and template configuration
@@ -29,12 +33,33 @@ py_template_flyio/
 ├── CLAUDE.md                     # THIS FILE - for maintaining template
 └── template/                     # All files that get copied to generated projects
     ├── {{module_name}}/          # Python package (name from user input)
-    │   ├── main.py.jinja         # FastAPI application
+    │   ├── main.py.jinja         # FastAPI application with authentication
     │   ├── config.py.jinja       # Settings management
     │   ├── db.py.jinja           # PostgreSQL database layer
-    │   └── db_migrate.py.jinja   # Migration utility
+    │   ├── db_migrate.py.jinja   # Migration utility
+    │   ├── models.py.jinja       # Pydantic models and SQLAlchemy ORM
+    │   ├── upload_files.py.jinja # File upload and thumbnail generation
+    │   ├── html_templates/       # Jinja2 HTML templates
+    │   │   ├── base.html         # Base template with mobile-responsive nav
+    │   │   ├── index.html        # Home page with hero section
+    │   │   ├── login.html        # User login form
+    │   │   ├── register.html     # User registration form
+    │   │   ├── files.html        # File listing and search
+    │   │   ├── upload.html       # File upload interface
+    │   │   ├── admin.html        # Admin dashboard
+    │   │   ├── counter.html      # Example counter page
+    │   │   ├── 404.html          # Not found error page
+    │   │   └── 500.html          # Server error page
+    │   └── static/               # Static assets
+    │       ├── style.css         # Responsive CSS with mobile design
+    │       ├── home-icon.svg     # Navigation icon
+    │       └── icon.png          # Favicon
     ├── tests/                    # Test files
     ├── docs/                     # Documentation templates
+    │   ├── design.md.jinja       # Design specifications
+    │   ├── requirements.md.jinja # Requirements documentation
+    │   ├── todos.md.jinja        # Project todos
+    │   └── features_concepts/    # Feature documentation
     ├── .cursor/rules/            # Cursor AI rules
     ├── CLAUDE.md.jinja           # Guidance for generated projects
     ├── check.sh                  # Quality checks script
@@ -45,6 +70,41 @@ py_template_flyio/
 - **`project_name`**: Kebab-case, used for Fly.io app names, git repos (e.g., `my-app`)
 - **`module_name`**: Snake_case, used for Python package names (e.g., `my_app`)
 - **Default behavior**: Derived from destination folder name if not specified
+
+## Key Features Included
+
+### Authentication & Authorization
+- **JWT-based authentication** with secure token handling
+- **Role-based access control** (visitor, user, admin)
+- **Optional authentication** for public endpoints
+- **Admin auto-creation** on first startup
+
+### File Management
+- **File upload** with unique filename generation
+- **Image thumbnail generation** using Pillow
+- **File search and filtering** by title and user
+- **Public file access** for visitors
+- **Role-based file operations** (upload, delete)
+
+### User Interface
+- **Mobile-responsive design** with Tailwind CSS
+- **Progressive enhancement** for authentication state
+- **Modern navigation** with mobile hamburger menu
+- **Hero section** with call-to-action buttons
+- **Clean, professional styling**
+
+### Database & Backend
+- **PostgreSQL integration** with SQLAlchemy ORM
+- **Database migrations** with db_migrate utility
+- **Environment-based configuration**
+- **Rate limiting** for API protection
+- **Error handling** with custom error pages
+
+### Deployment Ready
+- **Docker containerization**
+- **Fly.io deployment scripts**
+- **Production configuration**
+- **Quality assurance scripts** (black, ruff, mypy, pytest)
 
 ## Development Commands
 
