@@ -117,13 +117,13 @@
 
 {% block extra_scripts %}
 <script>
+// Use the global token from base.html - DRY principle
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
 const fileQueue = document.getElementById('file-queue');
 const uploadStatus = document.getElementById('upload-status');
 
-// Check authentication
-const token = localStorage.getItem('token');
+// Check authentication - token is already defined in base.html
 if (!token) {
     window.location.href = '/login';
 }

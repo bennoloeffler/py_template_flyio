@@ -152,7 +152,7 @@
 
 {% block extra_scripts %}
 <script>
-const token = localStorage.getItem('token');
+// Use the global token from base.html - DRY principle
 if (!token) {
     window.location.href = '/login';
 }

@@ -63,7 +63,9 @@ def is_image(content_type: str) -> bool:
     return content_type.startswith("image/") and content_type != "image/svg+xml"
 
 
-def generate_thumbnail(image_data: bytes, max_size: int = THUMBNAIL_MAX_SIZE) -> Optional[bytes]:
+def generate_thumbnail(
+    image_data: bytes, max_size: int = THUMBNAIL_MAX_SIZE
+) -> Optional[bytes]:
     """
     Generate a thumbnail from image data.
 
@@ -79,12 +81,12 @@ def generate_thumbnail(image_data: bytes, max_size: int = THUMBNAIL_MAX_SIZE) ->
         img = Image.open(io.BytesIO(image_data))
 
         # Convert RGBA to RGB if necessary (for JPEG output)
-        if img.mode in ('RGBA', 'LA', 'P'):
+        if img.mode in ("RGBA", "LA", "P"):
             # Create a white background
-            background = Image.new('RGB', img.size, (255, 255, 255))
-            if img.mode == 'P':
-                img = img.convert('RGBA')
-            background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+            background = Image.new("RGB", img.size, (255, 255, 255))
+            if img.mode == "P":
+                img = img.convert("RGBA")
+            background.paste(img, mask=img.split()[-1] if img.mode == "RGBA" else None)
             img = background
 
         # Calculate thumbnail size maintaining aspect ratio
@@ -92,7 +94,7 @@ def generate_thumbnail(image_data: bytes, max_size: int = THUMBNAIL_MAX_SIZE) ->
 
         # Save to bytes
         output = io.BytesIO()
-        img.save(output, format='JPEG', quality=85, optimize=True)
+        img.save(output, format="JPEG", quality=85, optimize=True)
         output.seek(0)
 
         return output.read()
@@ -178,14 +180,27 @@ class FileService:
             thumbnail_data = generate_thumbnail(file_data)
             if thumbnail_data:
                 # Store thumbnail as separate file
-                thumb_filename = f"thumb_{unique_filename}"
+                # Create thumbnail filename: image.jpg -> image_SMALL.jpg
+                name_parts = unique_filename.rsplit(".", 1)
+                if len(name_parts) == 2:
+                    thumb_filename = f"{name_parts[0]}_SMALL.{name_parts[1]}"
+                else:
+                    thumb_filename = f"{unique_filename}_SMALL"
+
+                # Same for original filename
+                orig_parts = original_filename.rsplit(".", 1)
+                if len(orig_parts) == 2:
+                    thumb_original = f"{orig_parts[0]}_SMALL.{orig_parts[1]}"
+                else:
+                    thumb_original = f"{original_filename}_SMALL"
+
                 await self.db.create_file_record(
                     filename=thumb_filename,
-                    original_filename=f"thumb_{original_filename}",
+                    original_filename=thumb_original,
                     content_type="image/jpeg",
                     file_size=len(thumbnail_data),
                     file_data=thumbnail_data,
-                    uploaded_by=user_id
+                    uploaded_by=user_id,
                 )
                 thumbnail_url = f"/api/files/{thumb_filename}"
 

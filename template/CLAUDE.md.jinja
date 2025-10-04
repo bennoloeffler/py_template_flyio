@@ -102,13 +102,16 @@ DROP_TABLES_BEFORE_INIT=true uv run uvicorn {{ module_name }}.main:app --reload 
 #### 1. **Application Layer** (`{{ module_name }}/main.py`)
 - **Primary Interface**: FastAPI application with rate limiting, CORS, and HTML templates
 - **Authentication**: JWT-based auth with role-based access control (admin/user/visitor)
+- **Visitor Access**: Public file browsing and download without authentication
+- **Optional Auth**: `get_optional_current_user()` allows endpoints to work for both authenticated users and visitors
 - **Rate Limiting**: Configurable limits per endpoint using slowapi
-- **HTML Rendering**: Jinja2 templates for web interface
+- **HTML Rendering**: Jinja2 templates for mobile-responsive web interface
 - **File Integration**: Static file serving and upload endpoints
 
 #### 2. **File Management System** (`{{ module_name }}/upload_files.py`)
 - **Black Box**: Complete file upload/download system with PostgreSQL BYTEA storage
-- **Features**: Unique filename generation, thumbnail creation, file type validation
+- **Features**: Unique filename generation, intelligent thumbnail creation (`image_SMALL.jpg`), file type validation
+- **Thumbnail System**: Automatic thumbnail generation for images with `_SMALL` suffix naming
 - **Architecture**: Files stored in database with metadata, not filesystem
 - **Interface**: FileService class with upload/download/list/delete operations
 - **Security**: File size limits (10MB), content type validation, user ownership
@@ -128,6 +131,8 @@ DROP_TABLES_BEFORE_INIT=true uv run uvicorn {{ module_name }}.main:app --reload 
 
 #### 5. **Configuration Management** (`{{ module_name }}/config.py`)
 - **Black Box**: Centralized settings with Pydantic BaseSettings
+- **Priority System**: .env file > shell environment > defaults (via `settings_customise_sources`)
+- **Startup Logging**: Shows configuration sources and DATABASE_URL at startup
 - **Interface**: Environment variables with sensible defaults
 - **Security**: Secret key management and admin password synchronization
 
@@ -150,10 +155,13 @@ DROP_TABLES_BEFORE_INIT=true uv run uvicorn {{ module_name }}.main:app --reload 
 
 ### Security Architecture
 - **Role-Based Access**: admin, user, visitor hierarchy
+- **Visitor Access**: Unauthenticated users can browse and download files
+- **Optional Authentication**: Endpoints use `get_optional_current_user()` for visitor support
 - **Password Hashing**: bcrypt with passlib context
-- **JWT Tokens**: HS256 algorithm with configurable expiration
+- **JWT Tokens**: HS256 algorithm with configurable expiration (30 days default)
 - **Environment Master**: ADMIN_PASSWORD environment variable controls admin access
 - **Rate Limiting**: Per-endpoint configurable limits
+- **Config Priority**: .env file always overrides shell environment variables
 
 
 ### Development Guidelines (from .cursor/rules)

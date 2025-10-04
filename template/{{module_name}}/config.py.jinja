@@ -6,10 +6,13 @@ All configuration is loaded from environment variables with sensible defaults.
 """
 
 import os
-from typing import List
+import logging
+from typing import List, Any, Dict
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -100,38 +103,48 @@ class Settings(BaseSettings):
         description="OpenAI API key for AI features",
     )
 
-    model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-        "case_sensitive": False,
-        "env_prefix": "",
-    }
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        env_prefix="",
+        # IMPORTANT: This makes .env override shell environment
+        env_ignore_empty=True,
+        extra="ignore"
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        """
+        Customize settings sources priority.
+        Order (first wins):
+        1. init_settings (constructor args)
+        2. dotenv_settings (.env file) - MOVED UP!
+        3. env_settings (shell environment) - MOVED DOWN!
+        4. file_secret_settings (secrets files)
+
+        This makes .env file override shell environment variables.
+        """
+        return (
+            init_settings,
+            dotenv_settings,  # .env file now takes precedence
+            env_settings,     # Shell env variables come after .env
+            file_secret_settings,
+        )
 
 
 def get_settings() -> Settings:
     """Get application settings with source tracking."""
+    # No need to manually load dotenv since pydantic-settings handles it
+    # with our custom settings_customise_sources method
     settings = Settings()
-
-    # Log configuration sources for debugging
-    if settings.debug:
-        print("=== Configuration Sources ===")
-        for field_name, field_info in Settings.model_fields.items():
-            env_var = field_name.upper()
-            value = getattr(settings, field_name)
-
-            # Check if value came from environment, .env file, or default
-            if env_var in os.environ:
-                source = f"shell environment variable '{env_var}'"
-            elif os.path.exists(".env") and any(
-                line.startswith(f"{env_var}=") for line in open(".env")
-            ):
-                source = ".env file"
-            else:
-                source = "default value"
-
-            print(f"{field_name}: using value '{value}' from {source}")
-        print("=== End Configuration ===")
-
     return settings
 
 

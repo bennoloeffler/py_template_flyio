@@ -19,7 +19,6 @@ from fastapi import (
     Depends,
     FastAPI,
     File,
-    Form,
     HTTPException,
     Request,
     Response,
@@ -40,17 +39,13 @@ from slowapi.util import get_remote_address
 from {{ module_name }}.config import settings
 from {{ module_name }}.db import get_db, setup_database
 from {{ module_name }}.models import (
-    ErrorResponse,
-    FileInfo,
     FileListResponse,
     FileUploadResponse,
-    LoginRequest,
     MessageResponse,
     Token,
     TokenData,
     UserCreate,
     UserPublic,
-    UserRole,
     UserUpdate,
 )
 from {{ module_name }}.upload_files import get_file_service
@@ -88,6 +83,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Lifespan context manager for startup and shutdown."""
     # Startup
     logger.info("Starting up {{ project_name }}...")
+
+    # Log configuration sources
+    logger.info("=== Configuration Sources ===")
+    shell_db_url = os.environ.get("DATABASE_URL")
+    if shell_db_url and shell_db_url != settings.database_url:
+        logger.info("DATABASE_URL is being overridden by .env file:")
+        logger.info(f"  .env value (USED): {settings.database_url}")
+        logger.info(f"  Shell env (IGNORED): {shell_db_url}")
+    else:
+        logger.info(f"DATABASE_URL: {settings.database_url}")
+        if shell_db_url:
+            logger.info("  Source: shell environment variable")
+        else:
+            logger.info("  Source: .env file or default")
+    logger.info("=== End Configuration ===")
+
     await setup_database(settings.database_url)
     logger.info("Database initialized")
 
@@ -191,6 +202,39 @@ async def require_admin(current_user=Depends(get_current_active_user)) -> Dict[s
             detail="Admin access required"
         )
     return current_user
+
+
+# OAuth2 scheme that doesn't require authentication
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+
+
+async def get_optional_current_user(
+    token: str = Depends(oauth2_scheme_optional),
+) -> Optional[Dict[str, Any]]:
+    """Get current user if authenticated, None otherwise (for visitors)."""
+    if not token:
+        return None
+
+    try:
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            return None
+
+        db = get_db()
+        user = await db.get_user_by_email(email=email)
+        if user and user["status"] == "active":
+            return user
+    except (JWTError, Exception):
+        pass
+
+    return None
 
 
 # ==================== Public Endpoints ====================
@@ -360,16 +404,19 @@ async def list_files(
     per_page: int = 50,
     search: Optional[str] = None,
     my_files_only: bool = False,
-    current_user=Depends(get_current_active_user)
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user),
 ):
-    """List files with pagination."""
+    """List files with pagination. Visitors can view files without authentication."""
     file_service = get_file_service()
 
     # Calculate offset
     offset = (page - 1) * per_page
 
-    # Get files
-    uploaded_by = current_user["id"] if my_files_only else None
+    # Get files - only filter by user if authenticated and my_files_only is True
+    uploaded_by = None
+    if my_files_only and current_user:
+        uploaded_by = current_user["id"]
+
     files = await file_service.list_files(
         limit=per_page,
         offset=offset,
@@ -398,9 +445,9 @@ async def list_files(
 @app.get("/api/files/{filename}")
 async def download_file(
     filename: str,
-    current_user=Depends(get_current_active_user)
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user),
 ):
-    """Download a file (requires authentication)."""
+    """Download a file. Visitors can download files without authentication."""
     file_service = get_file_service()
     file_data = await file_service.get_file(filename)
 
