@@ -23,6 +23,11 @@ SAFETY FEATURES:
 
 FOR NEW DEVELOPERS:
 - Migration steps are defined in the migration_steps list below
+- A migration_steps table tracks which steps have been completed.
+  This is done automatically.
+- Each migration step has a sequential number (0, 1, 2, etc.)
+- Each step has a human-readable description
+- Each step lists which data tables to back up before making changes
 - Each step uses the JSM field "sql_alter_tables_and_copy_data" for all SQL operations
 - Add new migration steps by appending to the migration_steps list
 - Never modify existing migration steps (would break existing databases)
@@ -42,14 +47,11 @@ JSM MIGRATION STEP FORMAT:
 """
 
 import logging
-import os
 from typing import Any, Dict
 
 import asyncpg
-from passlib.context import CryptContext
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from {{ module_name }}.db_utils import escape_identifier
 
 # Configure comprehensive logging
 logging.basicConfig(level=logging.INFO)
@@ -64,17 +66,16 @@ SQL_LOG_PREVIEW_LENGTH = 100  # How many characters of SQL to show in logs
 ERROR_MESSAGE_MAX_LENGTH = 200  # Truncate long error messages
 LARGE_TABLE_THRESHOLD = 100000  # Warn when backing up tables with more rows
 
-# Admin password configuration - use environment variable or default to admin123
-ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
-
 # MIGRATION STEP DATA STRUCTURE
 # List of migration steps - this is the single source of truth for all migrations
 #
 # Each migration step supports these fields:
 # - "step": Migration step number (0, 1, 2, etc.)
-# - "data_tables_to_backup": List of table names to backup before alterations
+# - "data_tables_to_backup": List of table names to backup before
+#   alterations
 # - "description": Human-readable description of what this migration does
-# - "sql_alter_tables_and_copy_data": List of SQL statements for table alterations and data operations
+# - "sql_alter_tables_and_copy_data": List of SQL statements for table
+#   alterations and data operations
 
 
 migration_steps = [
@@ -83,14 +84,8 @@ migration_steps = [
         "data_tables_to_backup": [],
         "description": "Initial database setup with users and files tables",
         "sql_alter_tables_and_copy_data": [
-            # Create migration tracking table
-            """
-            CREATE TABLE IF NOT EXISTS migration_steps (
-                step INTEGER PRIMARY KEY,
-                description TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """,
+            # Note: migration_steps table is auto-created by
+            # _ensure_migration_steps_table_exists()
             # Create users table
             """
             CREATE TABLE IF NOT EXISTS users (
@@ -129,49 +124,9 @@ migration_steps = [
             CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
             CREATE INDEX IF NOT EXISTS idx_files_uploaded_by ON files(uploaded_by);
             """,
-        ]
+        ],
     }
 ]
-
-
-async def create_admin_user(conn: asyncpg.Connection) -> None:
-    """Create the default admin user if it doesn't exist."""
-    admin_email = 'admin@{{ project_name }}.de'
-
-    # Check if admin already exists
-    existing = await conn.fetchval(
-        "SELECT email FROM users WHERE email = $1",
-        admin_email
-    )
-
-    if existing:
-        logger.info(f"✅ Admin user {admin_email} already exists")
-        return
-
-    # Generate password hash
-    admin_password = os.getenv('ADMIN_PASSWORD', 'admin123')
-    admin_password_hash = pwd_context.hash(admin_password)
-
-    # Log admin creation info (without showing password)
-    if admin_password == 'admin123':
-        logger.warning("⚠️  Using default admin password 'admin123' - CHANGE THIS IN PRODUCTION!")
-    else:
-        logger.info("✅ Using custom admin password from ADMIN_PASSWORD environment variable")
-
-    # Create admin user
-    await conn.execute(
-        """
-        INSERT INTO users (email, password_hash, role, status, full_name)
-        VALUES ($1, $2, $3, $4, $5)
-        """,
-        admin_email,
-        admin_password_hash,
-        'admin',
-        'active',
-        'Administrator'
-    )
-
-    logger.info(f"✅ Created admin user: {admin_email}")
 
 
 def log_migration_error(
@@ -194,21 +149,6 @@ def log_migration_error(
     logger.error("🔄 Entire migration will be rolled back due to this failure")
 
 
-def escape_identifier(name: str) -> str:
-    """
-    Safely escape SQL identifiers (table names, column names) to prevent SQL injection.
-    This is a simple implementation - in production, consider using asyncpg's SQL builder.
-
-    Args:
-        name: The identifier to escape
-
-    Returns:
-        Safely quoted identifier
-    """
-    # Basic escaping: wrap in quotes and escape any existing quotes
-    return '"' + name.replace('"', '""') + '"'
-
-
 class DatabaseMigrator:
     """
     Data-driven database migrator that implements the complete migration logic
@@ -228,7 +168,8 @@ class DatabaseMigrator:
         1. Check if migration_steps table exists
         2. Handle existing data with backups
         3. Apply ALL pending migrations in ONE HUGE ATOMIC TRANSACTION
-        4. Execute JSM SQL operations (table alterations and data operations in sequence)
+        4. Execute JSM SQL operations (table alterations and data
+           operations in sequence)
         5. Record migration completion
         6. Intensive error logging with assumption checking
 
@@ -243,20 +184,24 @@ class DatabaseMigrator:
 
             if os.getenv("DROP_TABLES_BEFORE_INIT", "false").lower() == "true":
                 logger.info(
-                    "🔥 DROP_TABLES_BEFORE_INIT=true detected - dropping all tables for fresh start"
+                    "🔥 DROP_TABLES_BEFORE_INIT=true detected - "
+                    "dropping all tables for fresh start"
                 )
                 await self._drop_all_tables_for_fresh_start(conn)
 
-            # MIGRATE LOGIC STEP 1: Check if this is first migration (outside transaction)
+            # MIGRATE LOGIC STEP 1: Check if this is first migration
+            # (outside transaction)
             migration_needed = await self._check_migration_needed(conn)
 
             if not migration_needed:
                 logger.info("ALL MIGRATIONS ARE UP TO DATE. NOTHING TO DO.")
                 return
 
-            # MIGRATE LOGIC STEP 11: ONE HUGE ATOMIC TRANSACTION FOR ENTIRE MIGRATION PROCESS
+            # MIGRATE LOGIC STEP 11: ONE HUGE ATOMIC TRANSACTION FOR
+            # ENTIRE MIGRATION PROCESS
             logger.info(
-                "🔒 Starting ATOMIC migration transaction - all steps will succeed or all will be rolled back"
+                "🔒 Starting ATOMIC migration transaction - "
+                "all steps will succeed or all will be rolled back"
             )
             try:
                 async with conn.transaction():
@@ -266,31 +211,32 @@ class DatabaseMigrator:
                     logger.info("🔓 Migration transaction committed successfully")
                     logger.info("=== Database migration completed successfully ===")
 
-                # Create admin user after migrations complete (in transaction)
-                await create_admin_user(conn)
-
             except Exception as e:
                 logger.error(f"💥 CRITICAL: Database migration failed: {e}")
                 logger.error(
-                    "🔄 ALL CHANGES HAVE BEEN ROLLED BACK - database is in original state"
+                    "🔄 ALL CHANGES HAVE BEEN ROLLED BACK - "
+                    "database is in original state"
                 )
                 logger.error("No manual cleanup required - transaction was atomic")
                 logger.error("")
                 logger.error("🔧 RECOVERY STEPS:")
                 logger.error("  1. Check database connectivity and permissions")
                 logger.error(
-                    "  2. Review migration_steps data structure for syntax errors"
+                    "  2. Review migration_steps data structure for " "syntax errors"
                 )
                 logger.error(
-                    "  3. Check application logs above for detailed SQL error messages"
+                    "  3. Check application logs above for detailed "
+                    "SQL error messages"
                 )
                 logger.error(
-                    "  4. Verify backup tables exist if this is not the first migration"
+                    "  4. Verify backup tables exist if this is not "
+                    "the first migration"
                 )
                 logger.error("  5. Contact development team if issue persists")
                 logger.error("")
                 logger.error(
-                    "💡 TIP: The database is unchanged - safe to retry after fixing the issue"
+                    "💡 TIP: The database is unchanged - "
+                    "safe to retry after fixing the issue"
                 )
                 raise
 
@@ -306,8 +252,8 @@ class DatabaseMigrator:
         try:
             # Get all table names in the database
             tables_query = """
-                SELECT tablename 
-                FROM pg_tables 
+                SELECT tablename
+                FROM pg_tables
                 WHERE schemaname = 'public'
                 ORDER BY tablename;
             """
@@ -351,7 +297,8 @@ class DatabaseMigrator:
         # Get highest completed migration step
         # COALESCE(value, default) returns the default if value is NULL
         # MAX(step) returns NULL when migration_steps table is empty
-        # So COALESCE(MAX(step), -1) means: "highest step number, or -1 if no steps completed yet"
+        # So COALESCE(MAX(step), -1) means: "highest step number,
+        # or -1 if no steps completed yet"
         highest_step = await conn.fetchval(
             """
             SELECT COALESCE(MAX(step), $1) FROM migration_steps;
@@ -366,7 +313,8 @@ class DatabaseMigrator:
         )
 
         logger.info(
-            f"Highest completed step: {highest_step}, Highest available step: {max_available}"
+            f"Highest completed step: {highest_step}, "
+            f"Highest available step: {max_available}"
         )
 
         if highest_step < max_available:
@@ -381,7 +329,8 @@ class DatabaseMigrator:
     async def _apply_pending_migrations(self, conn: asyncpg.Connection) -> None:
         """
         MIGRATE LOGIC STEP 2-12: Apply all pending migrations in sequence.
-        NOTE: This runs inside the main atomic transaction - no individual transactions here.
+        NOTE: This runs inside the main atomic transaction -
+        no individual transactions here.
         """
         logger.info("Applying pending migrations...")
 
@@ -401,7 +350,8 @@ class DatabaseMigrator:
         for step_data in migration_steps:
             if step_data["step"] > current_step:
                 logger.info(
-                    f"=== Applying migration step {step_data['step']}: {step_data['description']} ==="
+                    f"=== Applying migration step {step_data['step']}: "
+                    f"{step_data['description']} ==="
                 )
 
                 try:
@@ -437,7 +387,8 @@ class DatabaseMigrator:
         await self._create_backup_tables(conn, step_data)
 
         # MIGRATE LOGIC STEP 3: Execute JSM SQL operations
-        # Handles table alterations, data transformations, and copy operations in sequence
+        # Handles table alterations, data transformations, and copy
+        # operations in sequence
         await self._execute_sql_alterations(conn, step_data)
 
     async def _create_backup_tables(
@@ -458,7 +409,7 @@ class DatabaseMigrator:
             table_exists = await conn.fetchval(
                 """
                 SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
+                    SELECT FROM information_schema.tables
                     WHERE table_schema = 'public' AND table_name = $1
                 );
             """,
@@ -467,25 +418,29 @@ class DatabaseMigrator:
 
             if not table_exists:
                 logger.error(
-                    f"CRITICAL ERROR: Table '{table_name}' specified for backup does not exist!"
+                    f"CRITICAL ERROR: Table '{table_name}' specified "
+                    f"for backup does not exist!"
                 )
                 logger.error("This could be due to:")
                 logger.error("Misspelled table name in migration data")
                 logger.error("")
                 logger.error(
-                    "SAFETY CHECK: Cannot proceed with migration - may cause data loss!"
+                    "SAFETY CHECK: Cannot proceed with migration - "
+                    "may cause data loss!"
                 )
                 logger.error(
-                    f"Please verify table names in migration step {step_data['step']}"
+                    f"Please verify table names in migration step "
+                    f"{step_data['step']}"
                 )
                 raise ValueError(
-                    f"Table '{table_name}' specified for backup does not exist - cannot safely proceed"
+                    f"Table '{table_name}' specified for backup "
+                    f"does not exist - cannot safely proceed"
                 )
 
             backup_exists = await conn.fetchval(
                 """
                 SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
+                    SELECT FROM information_schema.tables
                     WHERE table_schema = 'public' AND table_name = $1
                 );
             """,
@@ -494,16 +449,21 @@ class DatabaseMigrator:
 
             if backup_exists:
                 logger.error(
-                    f"ASSUMPTION FAILED: Backup table collision - {backup_table_name} already exists"
+                    f"ASSUMPTION FAILED: Backup table collision - "
+                    f"{backup_table_name} already exists"
                 )
                 raise ValueError(
                     f"Backup table collision: {backup_table_name} already exists"
                 )
 
             # Create backup table so we can safely transform data later
-            # Pattern: original_table_name_migration_N_backup where N is the step number
-            # This preserves all original data in case migration fails or needs rollback
-            backup_sql = f"CREATE TABLE {escape_identifier(backup_table_name)} AS SELECT * FROM {escape_identifier(table_name)}"
+            # Pattern: original_table_name_migration_N_backup where N is
+            # the step number. This preserves all original data in case
+            # migration fails or needs rollback
+            backup_sql = (
+                f"CREATE TABLE {escape_identifier(backup_table_name)} "
+                f"AS SELECT * FROM {escape_identifier(table_name)}"
+            )
             await conn.execute(backup_sql)
 
             # Verify backup was created successfully by comparing row counts
@@ -517,15 +477,18 @@ class DatabaseMigrator:
             # Warn about large table backups (they might take time)
             if original_count > LARGE_TABLE_THRESHOLD:
                 logger.warning(
-                    f"Created backup of large table {table_name} ({original_count:,} rows) - this took extra time"
+                    f"Created backup of large table {table_name} "
+                    f"({original_count:,} rows) - this took extra time"
                 )
 
             if backup_count != original_count:
                 logger.error(
-                    f"ASSUMPTION FAILED: Backup verification failed for {table_name}"
+                    f"ASSUMPTION FAILED: Backup verification failed "
+                    f"for {table_name}"
                 )
                 raise ValueError(
-                    f"Backup verification failed: {table_name} has {original_count} rows but backup has {backup_count}"
+                    f"Backup verification failed: {table_name} has "
+                    f"{original_count} rows but backup has {backup_count}"
                 )
 
             logger.info(
@@ -586,8 +549,8 @@ class DatabaseMigrator:
         table_exists = await conn.fetchval(
             """
             SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' 
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public'
                 AND table_name = 'migration_steps'
             );
         """
@@ -623,7 +586,7 @@ class DatabaseMigrator:
 
         await conn.execute(
             """
-            INSERT INTO migration_steps (step, description) 
+            INSERT INTO migration_steps (step, description)
             VALUES ($1, $2)
         """,
             step_num,
@@ -634,21 +597,22 @@ class DatabaseMigrator:
 
 
 # MAIN MIGRATION FUNCTION
-async def migrate_database() -> None:
+async def migrate_database(db_pool: asyncpg.Pool) -> None:
     """
-    Main migration function that can be called from db.py without circular imports.
-    Uses the global database connection pool.
+    Main migration function that can be called from db.py.
+
+    Args:
+        db_pool: Active database connection pool
+
+    This function takes the pool as a parameter to avoid circular imports
+    between db.py and db_migrate.py.
     """
     try:
-        # Import here to avoid circular imports
-        from {{ module_name }}.db import get_db
-
-        db = get_db()
-        if not db.pool:
+        if not db_pool:
             logger.error("Database pool not initialized")
-            raise RuntimeError("Database not connected")
+            raise RuntimeError("Database pool is None")
 
-        migrator = DatabaseMigrator(db.pool)
+        migrator = DatabaseMigrator(db_pool)
         await migrator.migrate_database()
 
     except Exception as e:
@@ -667,16 +631,11 @@ if __name__ == "__main__":
         from {{ module_name }}.db import setup_database
 
         try:
-            # Setup database connection
+            # Setup database connection (this runs migrations + seeding)
             await setup_database(settings.database_url)
 
-            # Run migrations
-            await migrate_database()
-
-            logger.info("✅ All migrations completed successfully!")
-            logger.info(f"📧 Admin user: admin@{{ project_name }}.de")
-            if ADMIN_PASSWORD == "admin123":
-                logger.warning("⚠️  Remember to change the default admin password!")
+            logger.info("✅ All migrations and seeding completed successfully!")
+            logger.info("📧 Admin user: admin@{{ project_name.replace('-', '_') }}.de")
 
         except Exception as e:
             logger.error(f"❌ Migration failed: {e}")

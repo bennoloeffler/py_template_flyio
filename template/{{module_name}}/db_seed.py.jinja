@@ -1,0 +1,87 @@
+"""
+Database seeding - initial data setup.
+
+This module handles:
+- Admin user creation/verification
+- Future: Sample data for development
+- Future: Test data generation
+
+Separated from migrations because:
+- Migrations handle SCHEMA changes (tables, columns, indexes)
+- Seeding handles DATA initialization (admin users, defaults)
+
+This follows the Single Responsibility Principle.
+"""
+
+import logging
+
+import asyncpg  # type: ignore
+
+from {{ module_name }}.config import settings
+from {{ module_name }}.db_utils import hash_password
+
+logger = logging.getLogger(__name__)
+
+
+async def ensure_admin_user(conn: asyncpg.Connection) -> None:
+    """
+    Ensure the default admin user exists.
+
+    This is idempotent - safe to call multiple times.
+    If admin already exists, does nothing.
+    If admin doesn't exist, creates it with password from settings.
+
+    Args:
+        conn: Active database connection
+
+    Security:
+        - Password comes from settings.admin_password (env: ADMIN_PASSWORD)
+        - Warns if using default "admin123" password
+        - Uses bcrypt hashing via db_utils.hash_password()
+    """
+    admin_email = "admin@{{ project_name.replace('-', '_') }}.de"
+
+    # Check if admin already exists
+    existing = await conn.fetchval(
+        "SELECT email FROM users WHERE email = $1", admin_email
+    )
+
+    if existing:
+        logger.info(f"✅ Admin user {admin_email} already exists")
+        return
+
+    # Hash the admin password
+    admin_password_hash = hash_password(settings.admin_password)
+
+    # Log password source (without showing the actual password)
+    if settings.admin_password == "admin123":
+        logger.warning(
+            "⚠️  Using default admin password 'admin123' - " "CHANGE THIS IN PRODUCTION!"
+        )
+    else:
+        logger.info(
+            "✅ Using custom admin password from " "ADMIN_PASSWORD environment variable"
+        )
+
+    # Create admin user
+    await conn.execute(
+        """
+        INSERT INTO users (
+            email, password_hash, role, status, full_name
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        """,
+        admin_email,
+        admin_password_hash,
+        "admin",
+        "active",
+        "Administrator",
+    )
+
+    logger.info(f"✅ Created admin user: {admin_email}")
+    logger.info("📧 Login credentials:")
+    logger.info(f"   Email: {admin_email}")
+    if settings.admin_password == "admin123":
+        logger.info("   Password: admin123 (DEFAULT - PLEASE CHANGE!)")
+    else:
+        logger.info("   Password: (set via ADMIN_PASSWORD environment variable)")

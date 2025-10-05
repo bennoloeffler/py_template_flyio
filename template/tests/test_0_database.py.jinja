@@ -1,0 +1,37 @@
+"""
+First test file (runs first due to "0" prefix).
+
+This test verifies that database migration works correctly.
+The setup_test_database fixture drops tables before this test,
+and the first TestClient creation triggers the migration.
+"""
+
+from fastapi.testclient import TestClient
+
+
+class TestDatabaseMigration:
+    """Test database migration and setup."""
+
+    def test_database_migration_successful(self, client: TestClient) -> None:
+        """
+        Verify database migration completed successfully.
+
+        This is the FIRST test to run (alphabetically).
+        If this test passes, it means:
+        1. Database tables were dropped (by setup_test_database fixture)
+        2. Migration ran successfully (triggered by first TestClient)
+        3. Application can connect to database
+        """
+        # If we can hit the health endpoint, database is working
+        response = client.get("/health")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["status"] == "healthy"
+        assert "version" in data
+        assert "environment" in data
+
+        # Log success
+        print("\n✅ Database migration successful!")
+        print(f"   Version: {data['version']}")
+        print(f"   Environment: {data['environment']}")

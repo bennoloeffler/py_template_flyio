@@ -5,9 +5,8 @@ This module provides centralized configuration management using Pydantic BaseSet
 All configuration is loaded from environment variables with sensible defaults.
 """
 
-import os
 import logging
-from typing import List, Any, Dict
+from typing import List
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,18 +18,12 @@ class Settings(BaseSettings):
     """Application settings with validation and defaults."""
 
     # Application
-    app_title: str = "{{ project_name }}"
     app_version: str = Field(default="0.1.0", description="Application version")
     environment: str = Field(
         default="development",
         description="Environment mode (development/production)",
     )
     debug: bool = Field(default=False, description="Enable debug mode")
-
-    # Server
-    host: str = Field(default="0.0.0.0", description="Server host")
-    port: int = Field(default=8000, description="Server port")
-    workers: int = Field(default=1, description="Number of worker processes")
 
     # CORS
     allowed_origins: str | List[str] = Field(
@@ -45,7 +38,6 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
-
 
     # Database
     database_url: str = Field(
@@ -72,24 +64,6 @@ class Settings(BaseSettings):
         default=43200,  # 30 days = 30 * 24 * 60 minutes
         description="JWT token expiration time in minutes (default: 30 days)",
     )
-    token_refresh_threshold: float = Field(
-        default=0.5,
-        description="Refresh token when this fraction of lifetime has passed",
-    )
-
-    # File Upload Configuration
-    max_file_size_mb: int = Field(
-        default=10,
-        description="Maximum file upload size in megabytes",
-    )
-    allowed_file_extensions: List[str] = Field(
-        default=[
-            ".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg",
-            ".pdf", ".txt", ".csv", ".doc", ".docx", ".xls", ".xlsx",
-            ".zip", ".tar", ".gz", ".json", ".xml", ".html", ".md"
-        ],
-        description="Allowed file extensions for upload",
-    )
 
     # Rate Limiting
     default_rate_limit: str = Field(
@@ -101,12 +75,6 @@ class Settings(BaseSettings):
         description="Rate limit for health endpoint",
     )
 
-    # External Services
-    openai_api_key: str = Field(
-        default="your-openai-key-here",
-        description="OpenAI API key for AI features",
-    )
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -114,7 +82,7 @@ class Settings(BaseSettings):
         env_prefix="",
         # IMPORTANT: This makes .env override shell environment
         env_ignore_empty=True,
-        extra="ignore"
+        extra="ignore",
     )
 
     @classmethod
@@ -139,7 +107,7 @@ class Settings(BaseSettings):
         return (
             init_settings,
             dotenv_settings,  # .env file now takes precedence
-            env_settings,     # Shell env variables come after .env
+            env_settings,  # Shell env variables come after .env
             file_secret_settings,
         )
 

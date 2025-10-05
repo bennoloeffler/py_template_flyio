@@ -1,0 +1,138 @@
+"""
+Authentication tests.
+
+Tests for user registration, login, and token management.
+All tests use unique email addresses to avoid conflicts.
+"""
+
+import random
+import time
+
+from fastapi.testclient import TestClient
+
+
+def unique_email() -> str:
+    """Generate unique email address for testing."""
+    timestamp = int(time.time() * 1000)  # milliseconds
+    random_suffix = random.randint(1000, 9999)
+    return f"test_{timestamp}_{random_suffix}@example.com"
+
+
+class TestUserRegistration:
+    """Test user registration endpoint."""
+
+    def test_register_user_success(self, client: TestClient) -> None:
+        """Test successful user registration."""
+        email = unique_email()
+
+        response = client.post(
+            "/api/register",
+            json={
+                "email": email,
+                "password": "testpass123",
+                "full_name": "Test User",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == email
+        assert data["full_name"] == "Test User"
+        assert "id" in data
+        assert "password" not in data  # Password should not be returned
+
+    def test_register_duplicate_user_fails(self, client: TestClient) -> None:
+        """Test registering duplicate user fails."""
+        email = unique_email()
+
+        # Create first user
+        response1 = client.post(
+            "/api/register",
+            json={
+                "email": email,
+                "password": "testpass123",
+                "full_name": "First User",
+            },
+        )
+        assert response1.status_code == 200
+
+        # Try to create duplicate
+        response2 = client.post(
+            "/api/register",
+            json={
+                "email": email,  # Same email!
+                "password": "different123",
+                "full_name": "Second User",
+            },
+        )
+        assert response2.status_code == 400
+
+    def test_register_invalid_email_fails(self, client: TestClient) -> None:
+        """Test registration with invalid email fails."""
+        response = client.post(
+            "/api/register",
+            json={
+                "email": "not-an-email",  # Invalid format
+                "password": "testpass123",
+                "full_name": "Test User",
+            },
+        )
+        assert response.status_code == 422  # Validation error
+
+
+class TestUserLogin:
+    """Test user login endpoint."""
+
+    def test_login_success(self, client: TestClient) -> None:
+        """Test successful login."""
+        email = unique_email()
+        password = "testpass123"
+
+        # Register user first
+        client.post(
+            "/api/register",
+            json={"email": email, "password": password, "full_name": "Login User"},
+        )
+
+        # Login
+        response = client.post(
+            "/api/token", data={"username": email, "password": password}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert data["token_type"] == "bearer"
+        assert isinstance(data["access_token"], str)
+        assert len(data["access_token"]) > 20  # JWT token should be long
+
+    def test_login_wrong_password_fails(self, client: TestClient) -> None:
+        """Test login with wrong password fails."""
+        email = unique_email()
+
+        # Register user
+        client.post(
+            "/api/register",
+            json={
+                "email": email,
+                "password": "correctpass",
+                "full_name": "Wrong Pass User",
+            },
+        )
+
+        # Try login with wrong password
+        response = client.post(
+            "/api/token", data={"username": email, "password": "wrongpass"}
+        )
+
+        assert response.status_code == 401
+
+    def test_login_nonexistent_user_fails(self, client: TestClient) -> None:
+        """Test login with non-existent user fails."""
+        email = unique_email()  # Not registered
+
+        response = client.post(
+            "/api/token", data={"username": email, "password": "anypass"}
+        )
+
+        assert response.status_code == 401

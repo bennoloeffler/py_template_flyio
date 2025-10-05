@@ -265,8 +265,10 @@ async def health_check(request: Request):
 
 # ==================== Authentication Endpoints ====================
 
+
+@limiter.limit(settings.default_rate_limit)
 @app.post("/api/token", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None):
     """Login endpoint for OAuth2."""
     db = get_db()
     user = await db.authenticate_user(form_data.username, form_data.password)
@@ -287,8 +289,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+@limiter.limit(settings.default_rate_limit)
 @app.post("/api/register", response_model=UserPublic)
-async def register(user: UserCreate):
+async def register(user: UserCreate, request: Request = None):
     """Register a new user."""
     db = get_db()
 
@@ -380,10 +383,12 @@ async def update_me(
 
 # ==================== File Management Endpoints ====================
 
+@limiter.limit(settings.default_rate_limit)
 @app.post("/api/files/upload", response_model=FileUploadResponse)
 async def upload_file(
     file: UploadFile = File(...),
-    current_user=Depends(get_current_active_user)
+    current_user=Depends(get_current_active_user),
+    request: Request = None
 ):
     """Upload a file."""
     if not file.filename:

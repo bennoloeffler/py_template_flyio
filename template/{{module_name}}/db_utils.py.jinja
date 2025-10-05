@@ -1,0 +1,94 @@
+"""
+Database utilities for password hashing and other shared functions.
+
+This module provides:
+- Password hashing and verification with bcrypt
+- Safe handling of bcrypt's 72-byte password limit
+- Shared utilities used by db.py and db_seed.py
+
+No dependencies on db.py or db_migrate.py to avoid circular imports.
+"""
+
+import logging
+
+from passlib.context import CryptContext
+
+logger = logging.getLogger(__name__)
+
+# Suppress passlib's bcrypt version warning
+# (harmless - passlib tries to read bcrypt.__about__.__version__ which
+# doesn't exist in newer bcrypt versions)
+logging.getLogger("passlib").setLevel(logging.ERROR)
+
+# Password hashing context with explicit bcrypt configuration
+# This fixes compatibility issues with newer bcrypt versions
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12,  # Explicit cost factor
+    bcrypt__ident="2b",  # Use 2b variant (most compatible)
+)
+
+
+def hash_password(password: str) -> str:
+    """
+    Hash a password safely using bcrypt.
+
+    Handles bcrypt's 72-byte limit by truncating longer passwords.
+    This is safe because:
+    1. Bcrypt internally truncates at 72 bytes anyway
+    2. 72 bytes is ~72 ASCII characters or ~24 UTF-8 emoji characters
+    3. Most passwords are much shorter than this limit
+
+    Args:
+        password: Plain text password to hash
+
+    Returns:
+        Hashed password string safe for database storage
+    """
+    # Handle bcrypt's 72-byte limit
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > 72:
+        logger.warning(
+            f"Password exceeds 72 bytes ({len(password_bytes)} bytes), "
+            "truncating to fit bcrypt limit"
+        )
+        password = password_bytes[:72].decode("utf-8", errors="ignore")
+
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verify a plain password against its hashed version.
+
+    Args:
+        plain_password: Plain text password to verify
+        hashed_password: Hashed password from database
+
+    Returns:
+        True if password matches, False otherwise
+    """
+    # Apply same truncation as hashing for consistency
+    password_bytes = plain_password.encode("utf-8")
+    if len(password_bytes) > 72:
+        plain_password = password_bytes[:72].decode("utf-8", errors="ignore")
+
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def escape_identifier(name: str) -> str:
+    """
+    Safely escape SQL identifiers (table/column names) to prevent
+    SQL injection.
+
+    This is a simple implementation - wraps in quotes and escapes
+    existing quotes.
+
+    Args:
+        name: The identifier to escape
+
+    Returns:
+        Safely quoted identifier for use in SQL
+    """
+    return '"' + name.replace('"', '""') + '"'

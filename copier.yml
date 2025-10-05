@@ -75,8 +75,8 @@ _tasks:
   # Initialize git repo
   - "git init"
 
-  # Install dependencies
-  - "uv sync --extra dev || echo 'Note: uv sync failed - run manually after fixing any issues'"
+  # Install ALL dependencies
+  - "uv sync --all-extras || echo 'Note: uv sync failed - run manually after fixing any issues'"
 
   # Run quality checks (may fail on first run - that's expected)
   - "./check.sh || echo 'Note: Some checks failed - this is normal for first run'"
