@@ -101,6 +101,61 @@ class Settings(BaseSettings):
         description="Allowed file extensions for upload",
     )
 
+    @property
+    def max_file_size_bytes(self) -> int:
+        """Convert max_file_size_mb to bytes for validation."""
+        return self.max_file_size_mb * 1024 * 1024
+
+    @property
+    def allowed_content_types(self) -> set[str]:
+        """
+        Derive allowed MIME content types from file extensions.
+
+        This mapping ensures we validate uploads by content-type (secure)
+        while letting users configure by familiar extensions.
+        """
+        # Extension to content-type mapping
+        ext_to_content_type = {
+            # Images
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp",
+            ".svg": "image/svg+xml",
+            # Documents
+            ".pdf": "application/pdf",
+            ".txt": "text/plain",
+            ".csv": "text/csv",
+            ".md": "text/markdown",
+            ".html": "text/html",
+            ".doc": "application/msword",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls": "application/vnd.ms-excel",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            # Archives
+            ".zip": "application/zip",
+            ".tar": "application/x-tar",
+            ".gz": "application/gzip",
+            # Code
+            ".json": "application/json",
+            ".xml": "application/xml",
+        }
+
+        content_types = set()
+        for ext in self.allowed_file_extensions:
+            ext_lower = ext.lower()
+            if ext_lower in ext_to_content_type:
+                content_types.add(ext_to_content_type[ext_lower])
+
+        # Add alternate MIME types for compatibility
+        if "application/zip" in content_types:
+            content_types.add("application/x-zip-compressed")
+        if "image/jpeg" in content_types:
+            content_types.add("image/jpg")  # Some browsers use this
+
+        return content_types
+
     # Rate Limiting
     default_rate_limit: str = Field(
         default="100/minute",
