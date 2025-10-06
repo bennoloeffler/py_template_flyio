@@ -216,12 +216,6 @@ async def get_optional_current_user(
         return None
 
     try:
-        credentials_exception = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
@@ -355,7 +349,7 @@ async def update_me(
     db = get_db()
 
     # Prepare update fields
-    update_data = update.dict(exclude_unset=True)
+    update_data = update.model_dump(exclude_unset=True)
 
     # Don't allow role/status changes through this endpoint
     update_data.pop("role", None)
