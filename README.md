@@ -4,6 +4,89 @@ A **Copier template** for quickly bootstrapping a modern Python web application,
 
 ---
 
+## Quick Start (One Command Setup)
+
+### Prerequisites
+
+You need `curl` installed. Check if you have it:
+
+```bash
+curl --version
+```
+
+**If curl is not installed:**
+
+- **macOS**: curl is pre-installed
+- **Debian/Ubuntu**: `sudo apt-get update && sudo apt-get install -y curl`
+- **Fedora/RHEL**: `sudo dnf install -y curl`
+- **Alpine**: `apk add curl`
+
+### Install All Tools Automatically
+
+**One-liner installation:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bennoloeffler/py_template_flyio/main/setup-tools.sh | bash
+```
+
+This will install:
+- Core tools: git, python3.11+, uv, copier, postgresql, VS Code (with `code` CLI)
+- Development tools: ruff, black, mypy, pytest
+- Deployment tools: docker, flyctl, llm
+- Shell enhancements: eza, fzf, bat, fd, tree, trash, thefuck, pyenv
+- Shell configuration from `to_zshrc`
+
+**Or download and review before running:**
+
+```bash
+curl -O https://raw.githubusercontent.com/bennoloeffler/py_template_flyio/main/setup-tools.sh
+chmod +x setup-tools.sh
+./setup-tools.sh --check-only  # Check what's missing
+./setup-tools.sh               # Install everything
+```
+
+---
+
+## Getting Started
+
+After installing the tools, create your first project:
+
+```bash
+# Create a projects directory (if you don't have one)
+cd ~
+mkdir -p projects
+cd projects
+
+# Generate a new project from the template
+# (newpy is a shell function from to_zshrc, installed by setup-tools.sh)
+newpy my-new-project
+
+# Or using copier directly:
+copier copy https://github.com/bennoloeffler/py_template_flyio.git my-new-project --trust
+
+# The template will:
+# - Ask you questions (or use defaults based on folder name)
+# - Create virtual environment
+# - Install dependencies
+# - Initialize git repository
+# - Run quality checks
+# - Open in VS Code
+```
+
+After generation completes:
+
+```bash
+cd my-new-project
+source .venv/bin/activate  # Activate virtual environment
+
+# Run the development server
+uv run uvicorn my_new_project.main:app --reload --port 8877
+
+# Open in browser: http://localhost:8877
+```
+
+---
+
 ## Features
 
 - **Fly.io deployment**: Out-of-the-box configuration and Dockerfile for seamless deployment to Fly.io.
@@ -15,7 +98,7 @@ A **Copier template** for quickly bootstrapping a modern Python web application,
 
 ---
 
-## Usage
+## Manual Usage
 
 This is a **Copier template**. To generate a new project.
 Example:

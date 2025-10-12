@@ -26,13 +26,19 @@ call
 npx ccstatusline@latest
 
 # chrome dev tools
-claude mcp add chrome-devtools npx chrome-devtools-mcp@latest
+claude mcp add -s user chrome-devtools \
+  npx chrome-devtools-mcp@latest -- \
+  --executablePath "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
+
+# testing framework - but may give different access than chrome-devtools
+claude mcp add -s user playwright npx @playwright/mcp@latest
 
 # add context7 mcp
 claude mcp add -s user context7 -- npx -y @upstash/context7-mcp
 
 # add postgress mcp: use right db and pw
-claude mcp add -s user pg npx @executeautomation/database-server -- --postgresql --host localhost --database {{ module_name }} --user $PG_USER --password $PG_PASSWORD
+# SCOPE: project!
+claude mcp add -s project pg npx @executeautomation/database-server -- --postgresql --host localhost --database {{ module_name }} --user $PG_USER --password $PG_PASSWORD
 
 # send "all files in one shot" to gemini
 claude mcp add -s user consult7 uvx -- consult7 google AIxxxxxxxxxxJU
@@ -52,7 +58,8 @@ claude mcp add --scope user leann-server -- leann_mcp
 https://github.com/yichuan-w/LEANN
 
 # debug by reading and clicking browser
-claude mcp add --scope user puppeteer npx @agent-infra/mcp-server-browser@latest
+# REPLACED by playwright / google-devtools
+# claude mcp add --scope user puppeteer npx @agent-infra/mcp-server-browser@latest
 
 # to use moonshot.ch as model for claude
 source set_kimi_as_antrophic.sh
