@@ -93,6 +93,19 @@ check_tool() {
     fi
 }
 
+# Special check for Postgres.app (checks app bundle AND psql command)
+postgres_app_exists() {
+    # Check if Postgres.app exists
+    if [[ -d "/Applications/Postgres.app" ]]; then
+        return 0
+    fi
+    # Also check if psql is in PATH (might be from Homebrew or system install)
+    if command_exists psql; then
+        return 0
+    fi
+    return 1
+}
+
 # Install Homebrew (macOS)
 install_homebrew() {
     if [[ "$OS" != "macos" ]]; then
@@ -185,15 +198,36 @@ install_llm() {
 }
 
 install_ruff() {
-    if command_exists uv; then
-        # Ruff will be installed per-project via uv
-        echo "Ruff will be installed per-project via uv"
+    if [[ "$PACKAGE_MANAGER" == "brew" ]]; then
+        brew install ruff
+    elif command_exists uv; then
+        uv tool install ruff
     else
-        if [[ "$PACKAGE_MANAGER" == "brew" ]]; then
-            brew install ruff
-        else
-            python3 -m pip install --user ruff
-        fi
+        python3 -m pip install --user ruff
+    fi
+}
+
+install_black() {
+    if command_exists uv; then
+        uv tool install black
+    else
+        python3 -m pip install --user black
+    fi
+}
+
+install_mypy() {
+    if command_exists uv; then
+        uv tool install mypy
+    else
+        python3 -m pip install --user mypy
+    fi
+}
+
+install_pytest() {
+    if command_exists uv; then
+        uv tool install pytest
+    else
+        python3 -m pip install --user pytest
     fi
 }
 
@@ -379,7 +413,16 @@ main() {
     check_tool "npm" "npm" || true
     check_tool "uv (Python package installer)" "uv" || true
     check_tool "Copier (Template engine)" "copier" || true
-    check_tool "PostgreSQL" "psql" || true
+
+    # Special check for PostgreSQL (app bundle or psql command)
+    if postgres_app_exists; then
+        echo -e "${GREEN}✓${NC} PostgreSQL is installed"
+        INSTALLED_TOOLS+=("PostgreSQL")
+    else
+        echo -e "${RED}✗${NC} PostgreSQL is NOT installed"
+        MISSING_TOOLS+=("PostgreSQL")
+    fi
+
     check_tool "VS Code (code CLI)" "code" || true
 
     # Special check for Claude Code
@@ -396,9 +439,9 @@ main() {
     # Development tools
     echo -e "\n${BLUE}Development Tools (Required for generated projects):${NC}"
     check_tool "Ruff (Linter)" "ruff" || true
-    check_tool "Black (Formatter)" "black" || true  # Will be installed via uv per-project
-    check_tool "Mypy (Type checker)" "mypy" || true  # Will be installed via uv per-project
-    check_tool "Pytest (Testing)" "pytest" || true  # Will be installed via uv per-project
+    check_tool "Black (Formatter)" "black" || true
+    check_tool "Mypy (Type checker)" "mypy" || true
+    check_tool "Pytest (Testing)" "pytest" || true
 
     # Deployment tools
     echo -e "\n${BLUE}Deployment Tools (Optional):${NC}"
@@ -489,6 +532,15 @@ main() {
                 ;;
             "Ruff (Linter)")
                 install_tool "Ruff" "" "" "" "install_ruff"
+                ;;
+            "Black (Formatter)")
+                install_tool "Black" "" "" "" "install_black"
+                ;;
+            "Mypy (Type checker)")
+                install_tool "Mypy" "" "" "" "install_mypy"
+                ;;
+            "Pytest (Testing)")
+                install_tool "Pytest" "" "" "" "install_pytest"
                 ;;
             "Docker")
                 if [[ "$PACKAGE_MANAGER" == "brew" ]]; then
