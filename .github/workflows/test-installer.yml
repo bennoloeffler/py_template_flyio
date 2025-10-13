@@ -1,0 +1,88 @@
+name: Test Installer on Fresh macOS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'setup-tools.sh'
+      - 'to_zshrc'
+      - '.github/workflows/test-installer.yml'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  test-macos:
+    name: Test on macOS (Fresh Environment)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show macOS version
+        run: |
+          echo "macOS version:"
+          sw_vers
+          echo ""
+          echo "Pre-installed tools:"
+          echo "Git: $(git --version || echo 'not installed')"
+          echo "Python: $(python3 --version || echo 'not installed')"
+          echo "Node: $(node --version || echo 'not installed')"
+          echo "Homebrew: $(brew --version || echo 'not installed')"
+
+      - name: Make installer executable
+        run: chmod +x setup-tools.sh
+
+      - name: Step 1 - Check what's installed BEFORE
+        run: |
+          echo "=== Step 1: BEFORE Installation ==="
+          ./setup-tools.sh --check-only
+
+      - name: Step 2 - Run FULL installation
+        run: |
+          echo "=== Step 2: FULL Installation ==="
+          ./setup-tools.sh
+
+      - name: Step 3 - Check if anything is still missing
+        run: |
+          echo "=== Step 3: AFTER Installation - Check for missing tools ==="
+          ./setup-tools.sh --check-only
+
+  test-ubuntu:
+    name: Test on Ubuntu (Fresh Environment)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show Ubuntu version
+        run: |
+          echo "Ubuntu version:"
+          cat /etc/os-release
+          echo ""
+          echo "Pre-installed tools:"
+          echo "Git: $(git --version || echo 'not installed')"
+          echo "Python: $(python3 --version || echo 'not installed')"
+          echo "Node: $(node --version || echo 'not installed')"
+
+      - name: Make installer executable
+        run: chmod +x setup-tools.sh
+
+      - name: Step 1 - Check what's installed BEFORE
+        run: |
+          echo "=== Step 1: BEFORE Installation ==="
+          ./setup-tools.sh --check-only
+
+      - name: Step 2 - Run FULL installation
+        run: |
+          echo "=== Step 2: FULL Installation ==="
+          ./setup-tools.sh
+
+      - name: Step 3 - Check if anything is still missing
+        run: |
+          echo "=== Step 3: AFTER Installation - Check for missing tools ==="
+          ./setup-tools.sh --check-only
