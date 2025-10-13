@@ -198,24 +198,61 @@ install_ruff() {
 }
 
 install_postgres_app() {
-    local download_url="https://github.com/PostgresApp/PostgresApp/releases/latest/download/Postgres.dmg"
+    local download_url="https://github.com/PostgresApp/PostgresApp/releases/download/v2.9/Postgres-2.9-18.dmg"
     local dmg_path="/tmp/Postgres.dmg"
     local mount_point="/Volumes/Postgres"
 
     echo -e "${YELLOW}Downloading Postgres.app...${NC}"
-    curl -L -o "$dmg_path" "$download_url"
+    if ! curl -L -o "$dmg_path" "$download_url"; then
+        echo -e "${RED}✗ Failed to download Postgres.app${NC}"
+        echo -e "${YELLOW}URL: $download_url${NC}"
+        return 1
+    fi
+
+    # Check if download actually got a DMG file (not an HTML redirect or error page)
+    local file_size=$(stat -f%z "$dmg_path" 2>/dev/null || echo 0)
+    echo -e "${BLUE}Downloaded file size: $file_size bytes${NC}"
+
+    if [[ $file_size -lt 1000 ]]; then
+        echo -e "${RED}✗ Downloaded file is too small (likely an error page)${NC}"
+        echo -e "${YELLOW}Content of downloaded file:${NC}"
+        cat "$dmg_path"
+        rm "$dmg_path"
+        return 1
+    fi
 
     echo -e "${YELLOW}Mounting DMG...${NC}"
-    hdiutil attach "$dmg_path" -nobrowse -quiet
+    if ! hdiutil attach "$dmg_path" -nobrowse 2>&1 | tee /tmp/hdiutil_output.log; then
+        echo -e "${RED}✗ Failed to mount DMG${NC}"
+        echo -e "${YELLOW}hdiutil output:${NC}"
+        cat /tmp/hdiutil_output.log
+        rm -f "$dmg_path" /tmp/hdiutil_output.log
+        return 1
+    fi
+
+    # Verify mount point exists
+    if [[ ! -d "$mount_point" ]]; then
+        echo -e "${RED}✗ Mount point $mount_point not found${NC}"
+        echo -e "${YELLOW}Available volumes:${NC}"
+        ls -la /Volumes/
+        hdiutil detach "$mount_point" 2>/dev/null || true
+        rm -f "$dmg_path"
+        return 1
+    fi
 
     echo -e "${YELLOW}Installing Postgres.app to /Applications...${NC}"
-    cp -R "$mount_point/Postgres.app" /Applications/
+    if ! cp -R "$mount_point/Postgres.app" /Applications/; then
+        echo -e "${RED}✗ Failed to copy Postgres.app to /Applications${NC}"
+        hdiutil detach "$mount_point" -quiet 2>/dev/null || true
+        rm -f "$dmg_path"
+        return 1
+    fi
 
     echo -e "${YELLOW}Unmounting DMG...${NC}"
-    hdiutil detach "$mount_point" -quiet
+    hdiutil detach "$mount_point" -quiet 2>/dev/null || echo -e "${YELLOW}Warning: Could not unmount DMG${NC}"
 
     echo -e "${YELLOW}Cleaning up...${NC}"
-    rm "$dmg_path"
+    rm -f "$dmg_path" /tmp/hdiutil_output.log
 
     # Add to PATH in shell configs
     local postgres_path='/Applications/Postgres.app/Contents/Versions/latest/bin'
