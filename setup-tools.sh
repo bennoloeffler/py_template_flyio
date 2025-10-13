@@ -463,7 +463,19 @@ main() {
     # Deployment tools
     echo -e "\n${BLUE}Deployment Tools (Optional):${NC}"
     check_tool "Docker" "docker" || true
-    check_tool "Flyctl (Fly.io CLI)" "flyctl" || true
+
+    # Flyctl may be installed to ~/.fly/bin on Linux
+    if command_exists flyctl; then
+        echo -e "${GREEN}✓${NC} Flyctl (Fly.io CLI) is installed"
+        INSTALLED_TOOLS+=("Flyctl (Fly.io CLI)")
+    elif [[ -f "$HOME/.fly/bin/flyctl" ]]; then
+        echo -e "${GREEN}✓${NC} Flyctl (Fly.io CLI) is installed"
+        INSTALLED_TOOLS+=("Flyctl (Fly.io CLI)")
+    else
+        echo -e "${RED}✗${NC} Flyctl (Fly.io CLI) is NOT installed"
+        MISSING_TOOLS+=("Flyctl (Fly.io CLI)")
+    fi
+
     check_tool "llm (AI CLI for changelogs)" "llm" || true
 
     # Shell enhancement tools
@@ -472,10 +484,44 @@ main() {
     check_tool "trash (safe delete)" "trash" || true
     check_tool "thefuck (command correction)" "thefuck" || true
     check_tool "fzf (fuzzy finder)" "fzf" || true
-    check_tool "fd (modern find)" "fd" || true
-    check_tool "bat (cat with syntax)" "bat" || true
+
+    # fd has different command name on Debian/Ubuntu
+    if command_exists fd; then
+        echo -e "${GREEN}✓${NC} fd (modern find) is installed"
+        INSTALLED_TOOLS+=("fd (modern find)")
+    elif command_exists fdfind; then
+        echo -e "${GREEN}✓${NC} fd (modern find) is installed"
+        INSTALLED_TOOLS+=("fd (modern find)")
+    else
+        echo -e "${RED}✗${NC} fd (modern find) is NOT installed"
+        MISSING_TOOLS+=("fd (modern find)")
+    fi
+
+    # bat has different command name on Debian/Ubuntu
+    if command_exists bat; then
+        echo -e "${GREEN}✓${NC} bat (cat with syntax) is installed"
+        INSTALLED_TOOLS+=("bat (cat with syntax)")
+    elif command_exists batcat; then
+        echo -e "${GREEN}✓${NC} bat (cat with syntax) is installed"
+        INSTALLED_TOOLS+=("bat (cat with syntax)")
+    else
+        echo -e "${RED}✗${NC} bat (cat with syntax) is NOT installed"
+        MISSING_TOOLS+=("bat (cat with syntax)")
+    fi
+
     check_tool "tree (directory tree)" "tree" || true
-    check_tool "pyenv (Python version manager)" "pyenv" || true
+
+    # pyenv may be installed to ~/.pyenv on Linux
+    if command_exists pyenv; then
+        echo -e "${GREEN}✓${NC} pyenv (Python version manager) is installed"
+        INSTALLED_TOOLS+=("pyenv (Python version manager)")
+    elif [[ -d "$HOME/.pyenv" ]]; then
+        echo -e "${GREEN}✓${NC} pyenv (Python version manager) is installed"
+        INSTALLED_TOOLS+=("pyenv (Python version manager)")
+    else
+        echo -e "${RED}✗${NC} pyenv (Python version manager) is NOT installed"
+        MISSING_TOOLS+=("pyenv (Python version manager)")
+    fi
 
     # Summary
     print_section "Summary"
