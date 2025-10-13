@@ -231,6 +231,23 @@ install_pytest() {
     fi
 }
 
+install_pyenv() {
+    if [[ "$PACKAGE_MANAGER" == "brew" ]]; then
+        brew install pyenv
+    else
+        # Linux: Install via pyenv-installer
+        echo -e "${YELLOW}Installing pyenv via pyenv-installer...${NC}"
+        curl https://pyenv.run | bash
+
+        # Add to PATH for current session
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+
+        echo -e "\n${GREEN}✓ pyenv installed!${NC}"
+        echo -e "${BLUE}Note: pyenv has been added to your shell config${NC}"
+    fi
+}
+
 install_postgres_app() {
     local download_url="https://github.com/PostgresApp/PostgresApp/releases/download/v2.9/Postgres-2.9-18.dmg"
     local dmg_path="/tmp/Postgres.dmg"
@@ -579,7 +596,7 @@ main() {
                 install_tool "tree" "tree" "tree" "tree"
                 ;;
             "pyenv (Python version manager)")
-                install_tool "pyenv" "pyenv" "pyenv" "pyenv"
+                install_tool "pyenv" "" "" "" "install_pyenv"
                 ;;
         esac
     done
