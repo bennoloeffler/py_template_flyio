@@ -62,6 +62,19 @@ command_exists() {
     command -v "$1" &> /dev/null
 }
 
+# Special check for Claude Code (can be binary or alias)
+claude_exists() {
+    # Check if binary exists in standard location
+    if [[ -f "$HOME/.claude/local/claude" ]]; then
+        return 0
+    fi
+    # Check if command is available (binary in PATH or alias)
+    if command -v claude &> /dev/null; then
+        return 0
+    fi
+    return 1
+}
+
 # Check tool and record status
 check_tool() {
     local tool_name=$1
@@ -268,6 +281,37 @@ install_vscode() {
     fi
 }
 
+install_claude_code() {
+    # Claude Code is installed via npm globally
+    echo -e "${YELLOW}Installing Claude Code via npm...${NC}"
+
+    # Ensure npm is available
+    if ! command_exists npm; then
+        echo -e "${RED}npm not found! Installing Node.js first...${NC}"
+        install_nodejs
+    fi
+
+    # Install Claude Code globally
+    npm install -g @anthropic-ai/claude-code
+
+    echo -e "\n${GREEN}✓ Claude Code installed!${NC}"
+    echo -e "${BLUE}Run 'claude' to start using Claude Code.${NC}"
+}
+
+install_nodejs() {
+    if [[ "$PACKAGE_MANAGER" == "brew" ]]; then
+        brew install node
+    elif [[ "$PACKAGE_MANAGER" == "apt" ]]; then
+        # Install Node.js from NodeSource
+        curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+    elif [[ "$PACKAGE_MANAGER" == "dnf" ]]; then
+        sudo dnf install -y nodejs npm
+    fi
+
+    echo -e "\n${GREEN}✓ Node.js and npm installed!${NC}"
+}
+
 # Main installation flow
 main() {
     print_section "py_template_flyio - Tool Setup"
@@ -287,10 +331,23 @@ main() {
     echo -e "\n${BLUE}Core Tools (Required):${NC}"
     check_tool "Git" "git"
     check_tool "Python 3.11+" "python3"
+    check_tool "Node.js" "node"
+    check_tool "npm" "npm"
     check_tool "uv (Python package installer)" "uv"
     check_tool "Copier (Template engine)" "copier"
     check_tool "PostgreSQL" "psql"
     check_tool "VS Code (code CLI)" "code"
+
+    # Special check for Claude Code
+    if claude_exists; then
+        echo -e "${GREEN}✓${NC} Claude Code is installed"
+        INSTALLED_TOOLS+=("Claude Code")
+    else
+        echo -e "${RED}✗${NC} Claude Code is NOT installed"
+        MISSING_TOOLS+=("Claude Code")
+    fi
+
+    check_tool "ripgrep (rg)" "rg"
 
     # Development tools
     echo -e "\n${BLUE}Development Tools (Required for generated projects):${NC}"
@@ -354,6 +411,13 @@ main() {
                     echo -e "${YELLOW}Please install Python 3.11+ from python.org or your package manager${NC}"
                 fi
                 ;;
+            "Node.js")
+                install_tool "Node.js" "" "" "" "install_nodejs"
+                ;;
+            "npm")
+                # npm comes with Node.js, so install Node.js if npm is missing
+                install_tool "Node.js (includes npm)" "" "" "" "install_nodejs"
+                ;;
             "uv (Python package installer)")
                 install_tool "uv" "" "" "" "install_uv"
                 ;;
@@ -362,6 +426,12 @@ main() {
                 ;;
             "VS Code (code CLI)")
                 install_tool "VS Code" "" "" "" "install_vscode"
+                ;;
+            "Claude Code")
+                install_tool "Claude Code" "" "" "" "install_claude_code"
+                ;;
+            "ripgrep (rg)")
+                install_tool "ripgrep" "ripgrep" "ripgrep" "ripgrep"
                 ;;
             "PostgreSQL")
                 if [[ "$OS" == "macos" ]]; then

@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/bennoloeffler/py_template_flyio/mai
 ```
 
 This will install:
-- Core tools: git, python3.11+, uv, copier, postgresql, VS Code (with `code` CLI)
+- Core tools: git, python3.11+, node.js, npm, uv, copier, postgresql, VS Code (with `code` CLI), Claude Code, ripgrep
 - Development tools: ruff, black, mypy, pytest
 - Deployment tools: docker, flyctl, llm
 - Shell enhancements: eza, fzf, bat, fd, tree, trash, thefuck, pyenv
