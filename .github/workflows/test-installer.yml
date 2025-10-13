@@ -39,7 +39,7 @@ jobs:
       - name: Step 1 - Check what's installed BEFORE
         run: |
           echo "=== Step 1: BEFORE Installation ==="
-          ./setup-tools.sh --check-only
+          ./setup-tools.sh --check-only || true
 
       - name: Step 2 - Run FULL installation
         run: |
@@ -75,7 +75,7 @@ jobs:
       - name: Step 1 - Check what's installed BEFORE
         run: |
           echo "=== Step 1: BEFORE Installation ==="
-          ./setup-tools.sh --check-only
+          ./setup-tools.sh --check-only || true
 
       - name: Step 2 - Run FULL installation
         run: |

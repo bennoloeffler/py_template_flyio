@@ -12,6 +12,8 @@
 #   ./setup-tools.sh --check-only # Only check, don't install
 #
 # Supports: macOS (Homebrew), Linux (apt/dnf)
+# TESTING RESULTS, see:
+# https://github.com/bennoloeffler/py_template_flyio/actions
 #
 
 set -e
@@ -329,14 +331,14 @@ main() {
 
     # Core tools
     echo -e "\n${BLUE}Core Tools (Required):${NC}"
-    check_tool "Git" "git"
-    check_tool "Python 3.11+" "python3"
-    check_tool "Node.js" "node"
-    check_tool "npm" "npm"
-    check_tool "uv (Python package installer)" "uv"
-    check_tool "Copier (Template engine)" "copier"
-    check_tool "PostgreSQL" "psql"
-    check_tool "VS Code (code CLI)" "code"
+    check_tool "Git" "git" || true
+    check_tool "Python 3.11+" "python3" || true
+    check_tool "Node.js" "node" || true
+    check_tool "npm" "npm" || true
+    check_tool "uv (Python package installer)" "uv" || true
+    check_tool "Copier (Template engine)" "copier" || true
+    check_tool "PostgreSQL" "psql" || true
+    check_tool "VS Code (code CLI)" "code" || true
 
     # Special check for Claude Code
     if claude_exists; then
@@ -347,20 +349,20 @@ main() {
         MISSING_TOOLS+=("Claude Code")
     fi
 
-    check_tool "ripgrep (rg)" "rg"
+    check_tool "ripgrep (rg)" "rg" || true
 
     # Development tools
     echo -e "\n${BLUE}Development Tools (Required for generated projects):${NC}"
-    check_tool "Ruff (Linter)" "ruff"
+    check_tool "Ruff (Linter)" "ruff" || true
     check_tool "Black (Formatter)" "black" || true  # Will be installed via uv per-project
     check_tool "Mypy (Type checker)" "mypy" || true  # Will be installed via uv per-project
     check_tool "Pytest (Testing)" "pytest" || true  # Will be installed via uv per-project
 
     # Deployment tools
     echo -e "\n${BLUE}Deployment Tools (Optional):${NC}"
-    check_tool "Docker" "docker"
-    check_tool "Flyctl (Fly.io CLI)" "flyctl"
-    check_tool "llm (AI CLI for changelogs)" "llm"
+    check_tool "Docker" "docker" || true
+    check_tool "Flyctl (Fly.io CLI)" "flyctl" || true
+    check_tool "llm (AI CLI for changelogs)" "llm" || true
 
     # Shell enhancement tools
     echo -e "\n${BLUE}Shell Enhancement Tools (from to_zshrc):${NC}"
