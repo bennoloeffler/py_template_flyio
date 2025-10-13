@@ -200,7 +200,6 @@ install_ruff() {
 install_postgres_app() {
     local download_url="https://github.com/PostgresApp/PostgresApp/releases/download/v2.9/Postgres-2.9-18.dmg"
     local dmg_path="/tmp/Postgres.dmg"
-    local mount_point="/Volumes/Postgres"
 
     echo -e "${YELLOW}Downloading Postgres.app...${NC}"
     if ! curl -L -o "$dmg_path" "$download_url"; then
@@ -222,23 +221,29 @@ install_postgres_app() {
     fi
 
     echo -e "${YELLOW}Mounting DMG...${NC}"
-    if ! hdiutil attach "$dmg_path" -nobrowse 2>&1 | tee /tmp/hdiutil_output.log; then
+    local hdiutil_output=$(hdiutil attach "$dmg_path" -nobrowse 2>&1)
+    if [[ $? -ne 0 ]]; then
         echo -e "${RED}✗ Failed to mount DMG${NC}"
         echo -e "${YELLOW}hdiutil output:${NC}"
-        cat /tmp/hdiutil_output.log
-        rm -f "$dmg_path" /tmp/hdiutil_output.log
-        return 1
-    fi
-
-    # Verify mount point exists
-    if [[ ! -d "$mount_point" ]]; then
-        echo -e "${RED}✗ Mount point $mount_point not found${NC}"
-        echo -e "${YELLOW}Available volumes:${NC}"
-        ls -la /Volumes/
-        hdiutil detach "$mount_point" 2>/dev/null || true
+        echo "$hdiutil_output"
         rm -f "$dmg_path"
         return 1
     fi
+
+    # Extract mount point from hdiutil output (look for /Volumes/Postgres*)
+    local mount_point=$(echo "$hdiutil_output" | grep "/Volumes/Postgres" | awk '{print $NF}')
+
+    if [[ -z "$mount_point" || ! -d "$mount_point" ]]; then
+        echo -e "${RED}✗ Could not determine mount point${NC}"
+        echo -e "${YELLOW}hdiutil output:${NC}"
+        echo "$hdiutil_output"
+        echo -e "${YELLOW}Available volumes:${NC}"
+        ls -la /Volumes/
+        rm -f "$dmg_path"
+        return 1
+    fi
+
+    echo -e "${BLUE}Mounted at: $mount_point${NC}"
 
     echo -e "${YELLOW}Installing Postgres.app to /Applications...${NC}"
     if ! cp -R "$mount_point/Postgres.app" /Applications/; then
