@@ -21,12 +21,20 @@ curl --version
 - **Fedora/RHEL**: `sudo dnf install -y curl`
 - **Alpine**: `apk add curl`
 
-### Install All Tools Automatically
+### Check What's Missing
 
-**One-liner installation:**
+**Check which tools you need (safe - doesn't install):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/bennoloeffler/py_template_flyio/main/setup-tools.sh | bash
+```
+
+### Install Missing Tools
+
+**Install everything:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bennoloeffler/py_template_flyio/main/setup-tools.sh | bash -s -- --install
 ```
 
 This will install:
@@ -41,8 +49,8 @@ This will install:
 ```bash
 curl -O https://raw.githubusercontent.com/bennoloeffler/py_template_flyio/main/setup-tools.sh
 chmod +x setup-tools.sh
-./setup-tools.sh --check-only  # Check what's missing
-./setup-tools.sh               # Install everything
+./setup-tools.sh           # Check what's missing (default - safe)
+./setup-tools.sh --install # Install everything
 ```
 
 ---

@@ -8,8 +8,8 @@
 # 3. Deploy to Fly.io
 #
 # Usage:
-#   ./setup-tools.sh              # Check and install all tools
-#   ./setup-tools.sh --check-only # Only check, don't install
+#   ./setup-tools.sh              # Check only (default - safe)
+#   ./setup-tools.sh --install    # Actually install missing tools
 #
 # Supports: macOS (Homebrew), Linux (apt/dnf)
 # TESTING RESULTS, see:
@@ -26,9 +26,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Flags
-CHECK_ONLY=false
-if [[ "$1" == "--check-only" ]]; then
-    CHECK_ONLY=true
+INSTALL_MODE=false
+if [[ "$1" == "--install" ]]; then
+    INSTALL_MODE=true
 fi
 
 # Track what needs to be installed
@@ -533,12 +533,20 @@ main() {
         exit 0
     fi
 
-    if [[ "$CHECK_ONLY" == true ]]; then
+    # Default behavior: just report and exit
+    if [[ "$INSTALL_MODE" == false ]]; then
         echo -e "\n${YELLOW}Missing tools:${NC}"
         printf '%s\n' "${MISSING_TOOLS[@]}"
-        echo -e "\nRun without --check-only to install missing tools."
+        echo -e "\n${BLUE}To install missing tools, run:${NC}"
+        echo -e "  ${GREEN}./setup-tools.sh --install${NC}"
         exit 1
     fi
+
+    # Installation mode - show what will be installed
+    echo -e "\n${YELLOW}⚠️  INSTALLATION MODE${NC}"
+    echo -e "${YELLOW}Installing ${#MISSING_TOOLS[@]} missing tools:${NC}"
+    printf '  - %s\n' "${MISSING_TOOLS[@]}"
+    echo ""
 
     # Install missing tools
     print_section "Installing Missing Tools"
