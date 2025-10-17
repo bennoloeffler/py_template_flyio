@@ -1,6 +1,6 @@
 # py_template_flyio
 
-A **Copier template** for quickly bootstrapping a modern Python web application, ready for best-practice development, testing, and deployment on Fly.io.
+A **Copier template**, an **installer** and a **script for simple usage** for quickly bootstrapping a modern Python web application, ready for ai development with claude code, testing, and deployment on Fly.io.
 
 ---
 
@@ -39,10 +39,10 @@ curl -fsSL https://raw.githubusercontent.com/bennoloeffler/py_template_flyio/mai
 
 This will install:
 - Core tools: git, python3.11+, node.js, npm, uv, copier, postgresql, VS Code (with `code` CLI), Claude Code, ripgrep
-- Development tools: ruff, black, mypy, pytest
+- Python tools: ruff, black, mypy, pytest, pyenv
 - Deployment tools: docker, flyctl, llm
-- Shell enhancements: eza, fzf, bat, fd, tree, trash, thefuck, pyenv
-- Shell configuration from `to_zshrc`
+- Shell enhancements: eza, fzf, bat, fd, tree, trash, thefuck
+- Shell configuration from `to_zshrc` to the end of ~/.zshrc
 
 **Or download and review before running:**
 
@@ -62,15 +62,19 @@ After installing the tools, create your first project:
 ```bash
 # Create a projects directory (if you don't have one)
 cd ~
-mkdir -p projects
+mkdir -p projects # create if it does not exist
 cd projects
 
 # Generate a new project from the template
 # (newpy is a shell function from to_zshrc, installed by setup-tools.sh)
-newpy my-new-project
+
+newpy --list # list all versions of the template
+# you may use one of the old versions - but probably use the newest...
+newpy my-project # this way, your use the NEWEST
+newpy my-project --vcs-ref v6 #you may use an older version shown by --list
 
 # Or using copier directly:
-copier copy https://github.com/bennoloeffler/py_template_flyio.git my-new-project --trust
+copier copy https://github.com/bennoloeffler/py_template_flyio.git my-project --trust
 
 # The template will:
 # - Ask you questions (or use defaults based on folder name)
@@ -84,13 +88,15 @@ copier copy https://github.com/bennoloeffler/py_template_flyio.git my-new-projec
 After generation completes:
 
 ```bash
-cd my-new-project
-source .venv/bin/activate  # Activate virtual environment
+# vscode is opened in folder
+# .venv is activated
+# open terminal an run dev server
+./run-dev.sh
+# Open in browser: 
+http://localhost:8877
+# run claude in a second terminal
+claude
 
-# Run the development server
-uv run uvicorn my_new_project.main:app --reload --port 8877
-
-# Open in browser: http://localhost:8877
 ```
 
 ---
@@ -100,7 +106,6 @@ uv run uvicorn my_new_project.main:app --reload --port 8877
 - **Fly.io deployment**: Out-of-the-box configuration and Dockerfile for seamless deployment to Fly.io.
 - **uv in Docker**: Uses [uv](https://github.com/astral-sh/uv) for fast, reproducible dependency management inside Docker.
 - **FastAPI**: Modern, async Python web framework for building APIs and web apps.
-- **Cursor rules prepared**: Includes some new type of cursor rules for best-practice development with Cursor.
 - **CLAUDE.md**: how to use tools
 - **Code quality tools**: Pre-configured to run `ruff` (linting), `mypy` (type checking), and `black` (formatting).
 
@@ -132,63 +137,39 @@ You will be prompted for project-specific values (like `module_name`). If your <
 ## ALL DONE DURING Generation
 
 **so you dont have to e.g. this manually:**
-  - ```uv venv```
-  - ```git init```
-  - ```flyctl launch --name '{{project_name}}' --region fra --now```
-  - ```mv fly.toml fly.prod.toml```
-  - ```flyctl launch --name '{{project_name}}-test' --region fra --now```
-  - ```uv sync --dev```
-  - ```git add .```
+```
+  # Try to create databases (may fail if PostgreSQL not running - that's OK)
+  - "createdb -U postgres -h localhost -p 5432 {{ module_name }} || echo 'Note: Could not create database {{ module_name }} - ensure PostgreSQL is running'"
+  - "createdb -U postgres -h localhost -p 5432 {{ module_name }}_test || echo 'Note: Could not create test database {{ module_name }}_test'"
+
+  # Create virtual environment
+  - "uv venv"
+
+  # Initialize git repo
+  - "git init"
+
+  # Install ALL dependencies
+  - "uv sync --all-extras || echo 'Note: uv sync failed - run manually after fixing any issues'"
+
+  # Run quality checks (may fail on first run - that's expected)
+  - "./check.sh || echo 'Note: Some checks failed - this is normal for first run'"
+```
 
 
-1. **Create and activate a virtual environment:**
-   ```bash
-   uv venv
-   source .venv/bin/activate
-   uv sync
-   uv sync --dev
-
-   ```
-2. **Init git repo:**
-   ```bash
-   git init
-   git add .
-   ```
-
-3. **Deploy to Fly.io (with Docker):**
-   ```bash
-   flyctl launch --name '{{project_name}}' --region fra --now
-   mv fly.toml fly.prod.toml
-   flyctl launch --name '{{project_name}}-test' --region fra --now
-   ```
-
-4. **Create secrets (YOU NEED TO DO THAT)**
-   ```bash
-   flyctl secrets set OPENAI_API_KEY=$OPENAI_API_KEY
-   flyctl secrets set DB_FOLDER="/data"
-   ```
-
-4. **Create a volume for the database:  (YOU NEED TO DO THAT)**
-   ```bash
-   flyctl volumes create bels_volume --region fra --size 1
-   ```
-4. **add to github and have a first push before you deploy:  (YOU NEED TO DO THAT)**
-   ```bash
+**add to github and have a first push before you deploy:  (YOU NEED TO DO THAT)**
+```bash
    # do in vscode SHIFT+COMMAND+A -> `Publish To Github`
-   ```
+```
 
 
 ## Development
 3. **Run the app:**
    ```bash
-   uvicorn <your_module>.main:app 
-   uv run uvicorn <your_module>.main:app --reload --port 9876 #dev mode
+   ./run-dev.sh
    ```
 4. **Run tests:**
    ```bash
-   pytest # for running tests once
-   # or
-   ptw # for watching only tests
+   uv run pytest # for running tests once
    ```
 5. **Code quality checks:**
    ```bash
@@ -202,7 +183,7 @@ You will be prompted for project-specific values (like `module_name`). If your <
    ```
    or, run all checks and tests at once and watch for changes:
    ```bash
-   ./rcheck-watch.sh
+   ./check-watch.sh
    ```
 6. **Deploy to Fly.io (with Docker):**
 
@@ -211,9 +192,24 @@ You will be prompted for project-specific values (like `module_name`). If your <
     ```bash
     fly auth login
     ```
-- add the secrets needed for production and test apps
+- launch the app
+   ```
+   fly_launch_to_flyio.sh # creates app and app-test
+   ```
+- create the postgress cluster for prod and test on flyio
+   ```
+   fly_create_database_prod.sh # creates app and app-test
+   fly_create_database_test.sh # creates app and app-test
+
+   # this will create a secret "DATABASE_URL" in the apps!
+   ```
+
+- add the additional secrets needed for production and test apps
     ```bash
-    fly secrets set <key>="<value>"
+    # e.g. ADMIN_PASSWORD=Something12!different
+    .env
+    # and use
+    fly-set-secrets.sh # EDIT TO YOUR NEEDS!
     ```
 There are two fly.toml files:
     - fly.prod.toml: for production
@@ -222,12 +218,12 @@ There are two fly.toml files:
 
 But use:
 ```bash
-./deploy_test_fly.sh # for test system 
-./deploy_prod_fly.sh # for production system
+./fly_deploy_test.sh # for test system 
+./fly_deploy_prod.sh # for production system
 ```
 Because then, meaningful git tags are created and pushed to github.
 
-## Design, Requirements and TODOs: Basis for Cursor
+## CLAUDE CODE: Design, Requirements and TODOs
 in the docs/ folder, there are three empty files:
  - design.md: for design notes
  - requirements.md: for requirements
@@ -235,8 +231,4 @@ in the docs/ folder, there are three empty files:
 
 There is a file ```CLAUDE.md``` file, that you can use to generate the files.
 
-You use these files to document your design, requirements and todos for cursor.
-
-## Cursor Rules
-see folder .cursor/rules/rule_xxx.mdc
-Old style: cursorrules.yaml/json not used anymore.
+You use these files to document your design, requirements and todos for claude code.
