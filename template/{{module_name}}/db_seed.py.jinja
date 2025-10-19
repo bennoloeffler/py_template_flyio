@@ -39,7 +39,7 @@ async def ensure_admin_user(conn: asyncpg.Connection) -> None:
         - Warns if using default "admin123" password
         - Uses bcrypt hashing via db_utils.hash_password()
     """
-    admin_email = "admin@{{ project_name.replace('-', '_') }}.de"
+    admin_email = "admin@{{ project_name | lower | replace('_', '-') | replace(' ', '-') }}.de"
 
     # Check if admin already exists
     existing = await conn.fetchval(

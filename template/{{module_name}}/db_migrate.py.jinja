@@ -635,7 +635,7 @@ if __name__ == "__main__":
             await setup_database(settings.database_url)
 
             logger.info("✅ All migrations and seeding completed successfully!")
-            logger.info("📧 Admin user: admin@{{ project_name.replace('-', '_') }}.de")
+            logger.info("📧 Admin user: admin@{{ project_name | lower | replace('_', '-') | replace(' ', '-') }}.de")
 
         except Exception as e:
             logger.error(f"❌ Migration failed: {e}")

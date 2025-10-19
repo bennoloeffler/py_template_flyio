@@ -6,7 +6,7 @@
 
 Default admin user (created automatically on first startup):
 
-- **Admin Email**: `admin@{{ project_name }}.de`
+- **Admin Email**: `admin@{{ project_name | lower | replace('_', '-') | replace(' ', '-') }}.de`
 - **Admin Password**: `admin123` (or set via `ADMIN_PASSWORD` environment variable)
 
 **IMPORTANT**: Change the admin password immediately after first login!

@@ -11,7 +11,7 @@
 #   ./setup-tools.sh              # Check only (default - safe)
 #   ./setup-tools.sh --install    # Actually install missing tools
 #
-# Supports: macOS (Homebrew), Linux (apt/dnf)
+# Supports: macOS (Hasdfomebrew), Linux (apt/dnf)
 # TESTING RESULTS, see:
 # https://github.com/bennoloeffler/py_template_flyio/actions
 #
